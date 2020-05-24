@@ -3,10 +3,8 @@
 ## Getting started
 
 `$ npm install react-native-sg-camera-view --save`
-
-### Mostly automatic installation
-
-`$ react-native link react-native-sg-camera-view`
+## Link
+`$ pod install`
 
 ## Usage
 ```javascript
