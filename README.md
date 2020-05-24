@@ -12,6 +12,28 @@
 ```javascript
 import SgCameraView from 'react-native-sg-camera-view';
 
-// TODO: What to do with the module?
-SgCameraView;
+
+const beat = <local_path>;
+const lyric = <array_of_obc>;
+
+const Screen =()=>{
+  const cameraViewRef = useRef();
+  
+  const startRecording = () => {
+    cameraViewRef.current.startRecording();
+  }
+  
+  const onRecordingEnd = (uri) => {
+    // ...
+  }
+  return (
+    <SgCameraView 
+      ref={cameraViewRef}
+      beat={beat} 
+      lyric={lyric}
+      onRecordingEnd={onRecordingEnd}
+   />;
+  )
+}
 ```
+
