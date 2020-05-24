@@ -14,7 +14,7 @@ import SgCameraView from 'react-native-sg-camera-view';
 
 
 const beat = <local_path>;
-const lyric = <array_of_obc>;
+const lyric = <array_of_obj>;
 
 const Screen = () => {
   const cameraViewRef = useRef();
