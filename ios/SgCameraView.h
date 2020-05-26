@@ -1,5 +1,2 @@
-#import <React/RCTViewManager.h>
-
-@interface SgCameraView : RCTViewManager
-
-@end
+#import "React/RCTBridgeModule.h"
+#import "React/RCTViewManager.h"
