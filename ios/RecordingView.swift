@@ -20,6 +20,19 @@ class RecordingView: UIView {
   @objc var lyric: String?
   @objc var onRecordingEnd: RCTDirectEventBlock?
   
+  override func draw(_ rect: CGRect) {
+      print(String(describing: Self.self) ,#function, "TN_TEST: \(rect)")
+      self.frame = CGRect(origin: .zero, size: rect.size)
+      updateRecordButtonPosition()
+      if self.loadingView == nil {
+        setupLoadingView()
+      }
+      if self.cameraPreviewLayer == nil {
+        self.showCameraPreview()
+        self.bringSubview(toFront:self.btnRecord)
+      }
+  }
+    
   override init(frame: CGRect) {
      super.init(frame: frame)
      setupView()
@@ -31,34 +44,9 @@ class RecordingView: UIView {
    }
   
   private func setupView()  {
+    self.autoresizingMask = [.flexibleHeight, .flexibleWidth]
     setupRecordButton()
     setupAudioSession()
-  }
-  
-  override func layoutSubviews() {
-    super.layoutSubviews()
-    print(String(describing: Self.self) ,#function, "TN_TEST: \(self.frame)")
-    updateRecordButtonPosition()
-    if self.loadingView == nil {
-      setupLoadingView()
-    }
-    if self.cameraPreviewLayer == nil {
-      self.showCameraPreview()
-      self.bringSubview(toFront:self.btnRecord)
-    }
-  }
-    
-  override func reactSetFrame(_ frame: CGRect) {
-    print(String(describing: Self.self) ,#function, "TN_TEST: \(frame)")
-    super.reactSetFrame(frame)
-    self.frame = frame
-    if self.loadingView == nil {
-      setupLoadingView()
-    }
-    if self.cameraPreviewLayer == nil {
-      self.showCameraPreview()
-      self.bringSubviewToFront(self.btnRecord)
-    }
   }
     
   fileprivate func updateRecordButtonPosition() {
@@ -268,10 +256,10 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
             if let completion = self.onRecordingEnd {
               completion(["data":["uri": outputFileURL.path]])
             }
-            if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(outputFileURL.path)) {
-                UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.path, self, #selector(RecordingView.video(videoPath:didFinishSavingWithError:contextInfo:)), nil)
-            }
-            UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.absoluteString, self, nil, nil)
+//            if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(outputFileURL.path)) {
+//                UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.path, self, #selector(RecordingView.video(videoPath:didFinishSavingWithError:contextInfo:)), nil)
+//            }
+//            UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.absoluteString, self, nil, nil)
         }
     }
     
