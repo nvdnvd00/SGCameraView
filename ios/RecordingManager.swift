@@ -13,13 +13,13 @@ class RecordingManager: RCTViewManager {
     
   @objc var beat: String?
     @objc var lyric: String?
-    @objc var onRecordingEnd: RCTBubblingEventBlock?
+    @objc var onRNCRecordingEnd: RCTBubblingEventBlock?
   
     override func view() -> UIView! {
       let recordingView = RecordingView()
       recordingView.beat = self.beat
       recordingView.lyric = self.lyric
-      recordingView.onRecordingEnd = self.onRecordingEnd
+      recordingView.onRNCRecordingEnd = self.onRNCRecordingEnd
       return recordingView
     }
     
