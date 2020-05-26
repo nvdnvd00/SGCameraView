@@ -43,7 +43,7 @@ class RecordingView: UIView {
     }
     if self.cameraPreviewLayer == nil {
       self.showCameraPreview()
-      self.bringSubviewToFront(self.btnRecord)
+      self.bringSubview(toFront:self.btnRecord)
     }
   }
   
@@ -68,7 +68,7 @@ class RecordingView: UIView {
       }
       loadingView.isHidden = false
       self.playAudio(urlString: beat)
-      self.bringSubviewToFront(loadingView)
+      self.bringSubview(toFront:loadingView)
     }
   }
   
@@ -83,7 +83,7 @@ class RecordingView: UIView {
   
   fileprivate func realStartRecording() {
       loadingView?.isHidden = true
-    self.bringSubviewToFront(self.btnRecord)
+    self.bringSubview(toFront:self.btnRecord)
     self.btnRecord.isUserInteractionEnabled = true
       do {
           let initialOutputURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("output").appendingPathExtension("mov")
@@ -137,7 +137,7 @@ extension RecordingView {
         loadingView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
         self.addSubview(loadingView!)
         
-        let indicator = UIActivityIndicatorView.init(style: .whiteLarge)
+        let indicator = UIActivityIndicatorView.init(activityIndicatorStyle: .whiteLarge)
         loadingView?.addSubview(indicator)
         indicator.center = self.center
         indicator.startAnimating()
@@ -148,7 +148,7 @@ extension RecordingView {
     fileprivate func setupAudioSession() {
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(AVAudioSession.Category.playAndRecord, mode: AVAudioSession.Mode.videoRecording, options: AVAudioSession.CategoryOptions.mixWithOthers)
+            try audioSession.setCategory(AVAudioSessionCategoryPlayAndRecord, mode: AVAudioSessionModeVideoRecording, options: AVAudioSession.CategoryOptions.mixWithOthers)
         } catch {
             print(String(describing: Self.self) ,#function, "Can't Set Audio Session Category: \(error)")
         }
