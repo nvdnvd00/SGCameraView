@@ -2,9 +2,9 @@
 
 ## Getting started
 
-`$ npm install react-native-sg-camera-view@git+https://git@github.com/visionmedia/express.git`
+`$ npm install react-native-sg-camera-view@git+https://git@github.com/nvdnvd00/SGCameraView.git`
 or
-`$ yarn add https://git@github.com/visionmedia/express.git`
+`$ yarn add https://git@github.com/nvdnvd00/SGCameraView.git`
 ## Link
 `$ pod install`
 
