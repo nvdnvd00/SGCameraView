@@ -37,6 +37,7 @@ class RecordingView: UIView {
   
   override func layoutSubviews() {
     super.layoutSubviews()
+    print(String(describing: Self.self) ,#function, "TN_TEST: \(self.frame)")
     updateRecordButtonPosition()
     if self.loadingView == nil {
       setupLoadingView()
@@ -46,7 +47,20 @@ class RecordingView: UIView {
       self.bringSubview(toFront:self.btnRecord)
     }
   }
-  
+    
+  override func reactSetFrame(_ frame: CGRect) {
+    print(String(describing: Self.self) ,#function, "TN_TEST: \(frame)")
+    super.reactSetFrame(frame)
+    self.frame = frame
+    if self.loadingView == nil {
+      setupLoadingView()
+    }
+    if self.cameraPreviewLayer == nil {
+      self.showCameraPreview()
+      self.bringSubviewToFront(self.btnRecord)
+    }
+  }
+    
   fileprivate func updateRecordButtonPosition() {
     let xPosition: CGFloat = self.frame.size.width/2 - RECORD_BUTTON_HEIGHT/2
     let yPosition: CGFloat = self.frame.size.height - RECORD_BUTTON_HEIGHT - 10

@@ -7,6 +7,7 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTDevLoadingView.h>
 #import <React/RCTConvert.h>
+#import <React/UIView+React.h>
 //
 //  RecordingManagerBridge.m
 //  KaraokePlus

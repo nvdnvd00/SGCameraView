@@ -9,3 +9,4 @@
 #import <React/RCTBridgeModule.h>
 #import <React/RCTViewManager.h>
 #import <React/RCTDevLoadingView.h>
+#import <React/UIView+React.h>
