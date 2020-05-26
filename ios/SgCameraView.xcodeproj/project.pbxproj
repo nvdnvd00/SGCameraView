@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		84A7F738247D8AF40088CD83 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D2C031BC247CE4B700DB91A8 /* Images.xcassets */; };
+		84A7F73A247D96490088CD83 /* SgCameraImages.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 84A7F739247D96490088CD83 /* SgCameraImages.xcassets */; };
 		D2FD9EDC247CE3710067C5A5 /* RecordingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2FD9ED7247CE3710067C5A5 /* RecordingManager.swift */; };
 		D2FD9EDD247CE3710067C5A5 /* SgCameraView.m in Sources */ = {isa = PBXBuildFile; fileRef = D2FD9EDA247CE3710067C5A5 /* SgCameraView.m */; };
 		D2FD9EDF247CE3A10067C5A5 /* RecordingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2FD9EDE247CE3A10067C5A5 /* RecordingView.swift */; };
@@ -27,7 +27,7 @@
 
 /* Begin PBXFileReference section */
 		134814201AA4EA6300B7C361 /* libSgCameraView.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libSgCameraView.a; sourceTree = BUILT_PRODUCTS_DIR; };
-		D2C031BC247CE4B700DB91A8 /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
+		84A7F739247D96490088CD83 /* SgCameraImages.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = SgCameraImages.xcassets; sourceTree = "<group>"; };
 		D2FD9ED7247CE3710067C5A5 /* RecordingManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RecordingManager.swift; sourceTree = "<group>"; };
 		D2FD9ED8247CE3710067C5A5 /* SgCameraView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SgCameraView.h; sourceTree = "<group>"; };
 		D2FD9EDA247CE3710067C5A5 /* SgCameraView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SgCameraView.m; sourceTree = "<group>"; };
@@ -56,7 +56,7 @@
 		58B511D21A9E6C8500147676 = {
 			isa = PBXGroup;
 			children = (
-				D2C031BC247CE4B700DB91A8 /* Images.xcassets */,
+				84A7F739247D96490088CD83 /* SgCameraImages.xcassets */,
 				D2FD9EDE247CE3A10067C5A5 /* RecordingView.swift */,
 				D2FD9ED7247CE3710067C5A5 /* RecordingManager.swift */,
 				D2FD9ED8247CE3710067C5A5 /* SgCameraView.h */,
@@ -124,7 +124,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				84A7F738247D8AF40088CD83 /* Images.xcassets in Resources */,
+				84A7F73A247D96490088CD83 /* SgCameraImages.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
