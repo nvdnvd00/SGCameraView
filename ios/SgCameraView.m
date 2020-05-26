@@ -18,5 +18,5 @@
 @interface RCT_EXTERN_REMAP_MODULE(SgCameraView, RecordingManager, RCTViewManager)
 RCT_EXPORT_VIEW_PROPERTY(beat, NSString)
 RCT_EXPORT_VIEW_PROPERTY(lyric, NSString)
-RCT_EXPORT_VIEW_PROPERTY(onRNCRecordingEnd, RCTBubblingEventBlock)
+RCT_EXPORT_VIEW_PROPERTY(onRecordingEnd, RCTDirectEventBlock)
 @end

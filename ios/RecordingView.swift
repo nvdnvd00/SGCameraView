@@ -18,7 +18,7 @@ class RecordingView: UIView {
   
   @objc var beat: String?
   @objc var lyric: String?
-  @objc var onRNCRecordingEnd: RCTBubblingEventBlock?
+  @objc var onRecordingEnd: RCTDirectEventBlock?
   
   override init(frame: CGRect) {
      super.init(frame: frame)
@@ -251,7 +251,7 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
         }
         else {
             print(String(describing: Self.self) ,#function, "outputFileURL: \(outputFileURL)")
-            if let completion = self.onRNCRecordingEnd {
+            if let completion = self.onRecordingEnd {
               completion(["data":["uri": outputFileURL.path]])
             }
             if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(outputFileURL.path)) {

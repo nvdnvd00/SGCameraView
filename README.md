@@ -34,7 +34,7 @@ const Screen = () => {
       ref={cameraViewRef}
       beat={beat}
       lyric={lyric}
-      onRNCRecordingEnd={onRecordingEnd}
+      onRecordingEnd={onRecordingEnd}
    />;
   )
 }
