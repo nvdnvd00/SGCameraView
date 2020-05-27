@@ -22,21 +22,25 @@ class RecordingView: UIView {
   
   override func draw(_ rect: CGRect) {
       print(String(describing: Self.self) ,#function, "TN_TEST: \(rect)")
-      self.frame = CGRect(origin: .zero, size: rect.size)
-      updateRecordButtonPosition()
-      if self.loadingView == nil {
-        setupLoadingView()
-      }
-      if self.cameraPreviewLayer == nil {
-        self.showCameraPreview()
-        self.bringSubview(toFront:self.btnRecord)
-      }
+      updateLayout()
   }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        print(String(describing: Self.self) ,#function, "TN_TEST: \(self.frame)")
+        updateLayout()
+    }
     
   override init(frame: CGRect) {
      super.init(frame: frame)
      setupView()
    }
+    
+    override func reactSetFrame(_ frame: CGRect) {
+        super.reactSetFrame(frame)
+        print(String(describing: Self.self) ,#function, "TN_TEST: \(frame)")
+        self.frame = frame
+        updateLayout()
+    }
   
    required init?(coder aDecoder: NSCoder) {
      super.init(coder: aDecoder)
@@ -48,6 +52,19 @@ class RecordingView: UIView {
     setupRecordButton()
     setupAudioSession()
   }
+    
+    fileprivate func updateLayout() {
+        if self.btnRecord.isHidden {
+            updateRecordButtonPosition()
+        }
+        if self.loadingView == nil {
+          setupLoadingView()
+        }
+        if self.cameraPreviewLayer == nil {
+          self.showCameraPreview()
+          self.bringSubview(toFront:self.btnRecord)
+        }
+    }
     
   fileprivate func updateRecordButtonPosition() {
     let xPosition: CGFloat = self.frame.size.width/2 - RECORD_BUTTON_HEIGHT/2
@@ -107,6 +124,20 @@ class RecordingView: UIView {
           }
       }
   }
+    
+    deinit {
+        print(String(describing: Self.self) ,#function, "TN_TEST")
+        videoFileOutput = nil
+        
+        player?.removeObserver(self, forKeyPath: "timeControlStatus")
+        player = nil
+        
+        cameraPreviewLayer?.removeFromSuperlayer()
+        cameraPreviewLayer = nil
+        
+        loadingView?.removeFromSuperview()
+        loadingView = nil
+    }
 }
 
 //MARK: - Setup
@@ -253,9 +284,19 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
         }
         else {
             print(String(describing: Self.self) ,#function, "outputFileURL: \(outputFileURL)")
-            if let completion = self.onRecordingEnd {
-              completion(["data":["uri": outputFileURL.path]])
+            self.encodeVideo(at: outputFileURL) { (url, error) in
+                if let error = error {
+                    print(String(describing: Self.self) ,#function, "ERROR: Conver MOV to MP4: \(error.localizedDescription)")
+                    return
+                }
+                if let url = url {
+                    print(String(describing: Self.self) ,#function, "MOV to MP4: \(url.path)")
+                    if let completion = self.onRecordingEnd {
+                      completion(["data":["uri": url.path]])
+                    }
+                }
             }
+            
 //            if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(outputFileURL.path)) {
 //                UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.path, self, #selector(RecordingView.video(videoPath:didFinishSavingWithError:contextInfo:)), nil)
 //            }
@@ -278,5 +319,58 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
             window.rootViewController?.present(alertController, animated: true, completion: nil)
         }
     }
-
+    
+    func encodeVideo(at videoURL: URL, completionHandler: ((URL?, Error?) -> Void)?)  {
+        let avAsset = AVURLAsset(url: videoURL, options: nil)
+            
+        let startDate = Date()
+            
+        //Create Export session
+        guard let exportSession = AVAssetExportSession(asset: avAsset, presetName: AVAssetExportPresetPassthrough) else {
+            completionHandler?(nil, nil)
+            return
+        }
+            
+        //Creating temp path to save the converted video
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
+        let filePath = documentsDirectory.appendingPathComponent("rendered-Video.mp4")
+            
+        //Check if the file already exists then remove the previous file
+        if FileManager.default.fileExists(atPath: filePath.path) {
+            do {
+                try FileManager.default.removeItem(at: filePath)
+            } catch {
+                completionHandler?(nil, error)
+            }
+        }
+            
+        exportSession.outputURL = filePath
+        exportSession.outputFileType = AVFileType.mp4
+        exportSession.shouldOptimizeForNetworkUse = true
+        let start = CMTimeMakeWithSeconds(0.0, 0)
+        let range = CMTimeRangeMake(start, avAsset.duration)
+        exportSession.timeRange = range
+            
+        exportSession.exportAsynchronously(completionHandler: {() -> Void in
+            switch exportSession.status {
+            case .failed:
+                print(exportSession.error ?? "NO ERROR")
+                completionHandler?(nil, exportSession.error)
+            case .cancelled:
+                print("Export canceled")
+                completionHandler?(nil, nil)
+            case .completed:
+                //Video conversion finished
+                let endDate = Date()
+                    
+                let time = endDate.timeIntervalSince(startDate)
+                print(time)
+                print("Successful!")
+                print(exportSession.outputURL ?? "NO OUTPUT URL")
+                completionHandler?(exportSession.outputURL, nil)
+                    
+                default: break
+            }
+        })
+    }
 }
