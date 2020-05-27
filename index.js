@@ -1,5 +1,19 @@
+import React from "react";
+import PropTypes from "prop-types";
 import { requireNativeComponent } from "react-native";
 
-const SgCameraView = requireNativeComponent("SgCameraView", null);
+class CameraView extends React.Component {
+  render() {
+    return <SgCameraView {...this.props} />;
+  }
+}
 
-export default SgCameraView;
+CameraView.propTypes = {
+  beat: PropTypes.string.isRequired,
+  lyric: PropTypes.array,
+  onRecordingEnd: PropTypes.func.isRequired,
+};
+
+var SgCameraView = requireNativeComponent("SgCameraView", CameraView);
+
+module.exports = SgCameraView;
