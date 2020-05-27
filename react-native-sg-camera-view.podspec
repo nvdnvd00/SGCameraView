@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/nvdnvd00/SGCameraView.git", :tag => "#{s.version}" }
 
   s.source_files = "ios/**/*.{h,c,m,swift}"
-  s.resources = "ios/**/*.xcassets"
+  s.resources = "images/*.png"
   s.requires_arc = true
 
   s.dependency "React"
