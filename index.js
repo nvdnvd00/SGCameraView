@@ -3,8 +3,14 @@ import PropTypes from "prop-types";
 import { requireNativeComponent } from "react-native";
 
 class CameraView extends React.Component {
+  onRecordingEnd = (e) => {
+    const { data } = e.nativeEvent;
+    this.props.onRecordingEnd(data);
+  };
   render() {
-    return <SgCameraView {...this.props} />;
+    return (
+      <SgCameraView {...this.props} onRecordingEnd={this.onRecordingEnd} />
+    );
   }
 }
 
