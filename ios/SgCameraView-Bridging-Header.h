@@ -11,3 +11,5 @@
 #import <React/RCTDevLoadingView.h>
 #import <React/UIView+React.h>
 #import <React/RCTEventEmitter.h>
+#import <React/RCTUIManager.h>
+#import <React/RCTLog.h>

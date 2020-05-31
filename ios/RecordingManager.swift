@@ -12,19 +12,27 @@ import Foundation
 class RecordingManager: RCTViewManager {
     
   @objc var beat: String?
-    @objc var lyric: String?
-    @objc var onRecordingEnd: RCTDirectEventBlock?
+  @objc var lyric: [Any]?
+  @objc var onRecordingEnd: RCTDirectEventBlock?
+    
+  private var recordingView: RecordingView?
   
     override func view() -> UIView! {
       let recordingView = RecordingView()
       recordingView.beat = self.beat
       recordingView.lyric = self.lyric
       recordingView.onRecordingEnd = self.onRecordingEnd
-      return recordingView
+      self.recordingView = recordingView
+      return self.recordingView!
     }
     
     @objc override static func requiresMainQueueSetup() -> Bool {
       return true
     }
+    
+    @objc func cancelRecord() {
+        if let recordingView = self.recordingView {
+            recordingView.cancelRecording()
+        }
+    }
 }
-

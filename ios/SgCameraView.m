@@ -8,16 +8,12 @@
 #import <React/RCTDevLoadingView.h>
 #import <React/RCTConvert.h>
 #import <React/UIView+React.h>
-//
-//  RecordingManagerBridge.m
-//  KaraokePlus
-//
-//  Created by Trai Nguyen on 5/23/20.
-//  Copyright © 2020 Trai Nguyen. All rights reserved.
-//
+#import <React/RCTUIManager.h>
+#import <React/RCTLog.h>
 
 @interface RCT_EXTERN_REMAP_MODULE(SgCameraView, RecordingManager, RCTViewManager)
 RCT_EXPORT_VIEW_PROPERTY(beat, NSString)
-RCT_EXPORT_VIEW_PROPERTY(lyric, NSString)
+RCT_EXPORT_VIEW_PROPERTY(lyric, NSArray)
 RCT_EXPORT_VIEW_PROPERTY(onRecordingEnd, RCTDirectEventBlock)
+RCT_EXTERN_METHOD(cancelRecord)
 @end

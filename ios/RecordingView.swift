@@ -15,11 +15,20 @@ class RecordingView: UIView {
   private var player: AVPlayer?
   private var loadingView: UIView?
   private var btnRecord = UIButton(type: .custom)
-  
+  private var vwLyrics = UIView(frame: .zero)
+  private var txvLyrics = UITextView(frame: .zero)
+    
   @objc var beat: String?
-  @objc var lyric: String?
+  @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
+  @objc var lyricsNormalColor: UIColor = .black
+  @objc var lyricsHighlightColor: UIColor = .white
   
+  private var arrLyricsModel: [Lyrics] = []
+  private var timeObserverToken: Any?
+  private var isUserScroll: Bool = false
+  private var isCancelRecording: Bool = false
+    
   override func draw(_ rect: CGRect) {
       print(String(describing: Self.self) ,#function, "TN_TEST: \(rect)")
       updateLayout()
@@ -38,7 +47,7 @@ class RecordingView: UIView {
     override func reactSetFrame(_ frame: CGRect) {
         super.reactSetFrame(frame)
         print(String(describing: Self.self) ,#function, "TN_TEST: \(frame)")
-        self.frame = frame
+        self.frame = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
         updateLayout()
     }
   
@@ -51,6 +60,7 @@ class RecordingView: UIView {
     self.autoresizingMask = [.flexibleHeight, .flexibleWidth]
     setupRecordButton()
     setupAudioSession()
+    setupLyricsView()
   }
     
     fileprivate func updateLayout() {
@@ -60,6 +70,11 @@ class RecordingView: UIView {
         if self.loadingView == nil {
           setupLoadingView()
         }
+        if self.vwLyrics.frame == .zero {
+            self.parseLyrics()
+            self.updateLyricsViewPosition()
+            self.updateHighlightLyrics(time: 0.0)
+        }
         if self.cameraPreviewLayer == nil {
           self.showCameraPreview()
           self.bringSubview(toFront:self.btnRecord)
@@ -67,12 +82,12 @@ class RecordingView: UIView {
     }
     
   fileprivate func updateRecordButtonPosition() {
-    let xPosition: CGFloat = self.frame.size.width/2 - RECORD_BUTTON_HEIGHT/2
-    let yPosition: CGFloat = self.frame.size.height - RECORD_BUTTON_HEIGHT - 10
+    let xPosition: CGFloat = self.frame.size.width/2 - self.RECORD_BUTTON_HEIGHT/2
+    let yPosition: CGFloat = self.frame.size.height - self.RECORD_BUTTON_HEIGHT - 10
     if self.btnRecord.isHidden {
       self.btnRecord.isHidden = false
     }
-    self.btnRecord.frame = CGRect(x: xPosition, y: yPosition, width: RECORD_BUTTON_HEIGHT, height: RECORD_BUTTON_HEIGHT)
+    self.btnRecord.frame = CGRect(x: xPosition, y: yPosition, width: self.RECORD_BUTTON_HEIGHT, height: self.RECORD_BUTTON_HEIGHT)
   }
   
   func startRecording() {
@@ -96,10 +111,28 @@ class RecordingView: UIView {
       self.videoFileOutput?.stopRecording()
       if let player = self.player {
           player.pause()
+          self.removePeriodicTimeObserver()
       }
     }
   }
-  
+    
+    @objc func cancelRecording() {
+        print(String(describing: Self.self) ,#function)
+        isCancelRecording = true
+        if let output = self.videoFileOutput {
+            output.stopRecording()
+        }
+        if let player = self.player, player.rate > 0 {
+            player.pause()
+            self.removePeriodicTimeObserver()
+        }
+    }
+    
+    @objc func endPlayVideo() {
+        print("____endPlayVideo")
+        self.ontapRecodingButton(sender: self.btnRecord)
+    }
+    
   fileprivate func realStartRecording() {
       loadingView?.isHidden = true
     self.bringSubview(toFront:self.btnRecord)
@@ -126,6 +159,8 @@ class RecordingView: UIView {
   }
     
     deinit {
+        removePeriodicTimeObserver()
+        
         print(String(describing: Self.self) ,#function, "TN_TEST")
         videoFileOutput = nil
         
@@ -137,6 +172,11 @@ class RecordingView: UIView {
         
         loadingView?.removeFromSuperview()
         loadingView = nil
+        
+        self.txvLyrics.removeFromSuperview()
+        self.vwLyrics.removeFromSuperview()
+        
+        NotificationCenter.default.removeObserver(self)
     }
 }
 
@@ -166,16 +206,16 @@ extension RecordingView {
   }
   
     fileprivate func setupLoadingView() {
-        loadingView = UIView(frame: CGRect(x: 0, y: 0, width: self.bounds.size.width, height: self.bounds.size.height))
-        loadingView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
-        self.addSubview(loadingView!)
+        self.loadingView = UIView(frame: CGRect(x: 0, y: 0, width: self.bounds.size.width, height: self.bounds.size.height))
+        self.loadingView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        self.addSubview(self.loadingView!)
         
         let indicator = UIActivityIndicatorView.init(activityIndicatorStyle: .whiteLarge)
-        loadingView?.addSubview(indicator)
+        self.loadingView?.addSubview(indicator)
         indicator.center = self.center
         indicator.startAnimating()
         
-        loadingView?.isHidden = true
+        self.loadingView?.isHidden = true
     }
     
     fileprivate func setupAudioSession() {
@@ -193,13 +233,174 @@ extension RecordingView {
             print(String(describing: Self.self) ,#function, "Can't Start Audio Session: \(error)")
         }
     }
+    
+    fileprivate func setupLyricsView() {
+        self.txvLyrics.textColor = self.lyricsNormalColor
+        self.txvLyrics.backgroundColor = .clear
+        self.txvLyrics.textAlignment = .center
+        self.txvLyrics.isEditable = false
+        self.txvLyrics.layer.masksToBounds = true
+        self.txvLyrics.delegate = self
+        self.vwLyrics.addSubview(self.txvLyrics)
+        
+        self.addSubview(self.vwLyrics)
+    }
+    
+    fileprivate func updateLyricsViewPosition() {
+        let paddingTop: CGFloat = 55
+        let paddingBottom: CGFloat = paddingTop + 5
+        self.vwLyrics.frame = CGRect(x: 0, y: 0, width: self.bounds.size.width, height: self.bounds.size.height * 0.25 + paddingTop)
+        
+        self.txvLyrics.frame = CGRect(x: 10, y: paddingTop, width: self.vwLyrics.bounds.size.width - 20, height: self.vwLyrics.bounds.size.height - paddingBottom)
+        self.txvLyrics.autoresizingMask = [.flexibleTopMargin, .flexibleRightMargin, .flexibleBottomMargin, .flexibleLeftMargin]
+        
+        let gradient = CAGradientLayer()
+        let colorTop = UIColor(red: 255.0 / 255.0, green: 168.0 / 255.0, blue: 31.0 / 255.0, alpha: 1.0).cgColor
+        let colorBottom = UIColor(red: 241.0 / 255.0, green: 190.0 / 255.0, blue: 65.0 / 255.0, alpha: 1.0).cgColor
+        gradient.colors = [colorTop, colorBottom]
+        gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        gradient.locations = [0.0, 0.75]
+        gradient.frame = self.vwLyrics.frame
+        self.vwLyrics.layer.insertSublayer(gradient, at: 0)
+    }
+    
+    fileprivate func parseLyrics() {
+        let decoder = JSONDecoder()
+        if let lyricsDict = self.lyric as? [[String: Any]] {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject:lyricsDict, options:[])
+                self.arrLyricsModel = try decoder.decode([Lyrics].self, from: jsonData)
+            } catch {
+                print("JSON serialization failed:  \(error)")
+            }
+        }
+    }
 }
-
-//MARK: - Private function
+//MARK: - Update highlight lyrics
+extension RecordingView {
+    fileprivate func updateHighlightLyrics(time: Double = 0.0) {
+        var highlightLyricsString = ""
+        var normalLyricsString = ""
+        
+        highlightLyricsString.append(self.getHighlightTextFullSentence(array: self.arrLyricsModel, time: time))
+        
+        let (highlightHalf, normalHalf) = self.getStatusTextHalfSentence(array: self.arrLyricsModel, time: time)
+        if highlightLyricsString.count > 0 {
+            highlightLyricsString.append(" ")
+        }
+        highlightLyricsString.append(highlightHalf)
+        
+        normalLyricsString.append(normalHalf)
+        if normalLyricsString.count > 0 {
+            normalLyricsString.append(" ")
+        }
+        normalLyricsString.append(self.getNormalTextFullSentence(array: self.arrLyricsModel, time: time))
+        
+        var finalString = highlightLyricsString
+        if finalString.count > 0 {
+            finalString.append(" ")
+        }
+        finalString.append(normalLyricsString)
+        
+        //Scroll
+        if self.isUserScroll == false && finalString.count > 0 {
+            let percentHilightText: Double = Double(highlightLyricsString.count) / Double(finalString.count)
+            let highlightPosition = CGFloat(percentHilightText) * self.txvLyrics.contentSize.height
+            var yPosition = (highlightPosition - (self.txvLyrics.frame.size.height/2)) > 0 ? (highlightPosition - (self.txvLyrics.frame.size.height/2)) : 0
+            let height = self.txvLyrics.frame.size.height
+            if (yPosition + height) >= self.txvLyrics.contentSize.height {
+                yPosition = self.txvLyrics.contentSize.height - height
+            }
+            let visibleFrame = CGRect(x: 0, y: yPosition, width: self.txvLyrics.frame.size.width, height: height)
+            self.txvLyrics.scrollRectToVisible(visibleFrame, animated: true)
+        }
+        
+        let finalAttributeString = NSMutableAttributedString(string: finalString)
+        if highlightLyricsString.count == 0 {
+            finalAttributeString.addAttributes([.foregroundColor : self.lyricsNormalColor], range: NSRange(location: 0, length: finalString.count))
+        }
+        else if normalLyricsString.count == 0 {
+            finalAttributeString.addAttributes([.foregroundColor : self.lyricsHighlightColor], range: NSRange(location: 0, length: finalString.count))
+        }
+        else {
+            finalAttributeString.addAttributes([.foregroundColor : self.lyricsHighlightColor], range: NSRange(location: 0, length: highlightLyricsString.count))
+            finalAttributeString.addAttributes([.foregroundColor : self.lyricsNormalColor], range: NSRange(location: highlightLyricsString.count, length: normalLyricsString.count))
+        }
+        let font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        finalAttributeString.addAttributes([.font : font], range: NSRange(location: 0, length: finalString.count))
+        self.txvLyrics.attributedText = finalAttributeString
+    }
+    
+    fileprivate func getHighlightTextFullSentence(array: [Lyrics], time: Double) -> String{
+        var highlightLyricsString = ""
+        let highlightTextFullSentence = array.filter({ ($0.end ?? 0) <= time })
+        for lyrics in highlightTextFullSentence {
+            if let content = lyrics.content {
+                if highlightLyricsString.count > 0 {
+                    highlightLyricsString.append(" ")
+                }
+                highlightLyricsString.append(self.removeTimeInString(string: content))
+            }
+        }
+        return highlightLyricsString
+    }
+    
+    fileprivate func getStatusTextHalfSentence(array: [Lyrics], time: Double) -> (highlight: String, normal: String) {
+        var highlightLyricsString = ""
+        var normalLyricsString = ""
+        let highlightTextHalf = array.filter({ ($0.start ?? 0) <= time && ($0.end ?? 0) > time})
+        for lyrics in highlightTextHalf {
+            if let arrChildLyrics = lyrics.data {
+                for childLyrics in arrChildLyrics {
+                    if let content = childLyrics.content, let start = childLyrics.start {
+                        if start <= time {
+                            if highlightLyricsString.count > 0 {
+                                highlightLyricsString.append(" ")
+                            }
+                            highlightLyricsString.append(content)
+                        }
+                        else {
+                            if normalLyricsString.count > 0 {
+                                normalLyricsString.append(" ")
+                            }
+                            normalLyricsString.append(content)
+                        }
+                    }
+                }
+            }
+        }
+        return (highlightLyricsString, normalLyricsString)
+    }
+    
+    fileprivate func getNormalTextFullSentence(array: [Lyrics], time: Double) -> String {
+        var normalLyricsString = ""
+        let normalTextFullSentence = self.arrLyricsModel.filter({ ($0.start ?? 0) > time })
+        for lyrics in normalTextFullSentence {
+            if let content = lyrics.content {
+                if normalLyricsString.count > 0 {
+                    normalLyricsString.append(" ")
+                }
+                normalLyricsString.append(self.removeTimeInString(string: content))
+            }
+        }
+        return normalLyricsString
+    }
+    
+    fileprivate func removeTimeInString(string: String) -> String {
+        let regex = try! NSRegularExpression(pattern: "<(.*?)>", options: NSRegularExpression.Options.caseInsensitive)
+        let range = NSMakeRange(0, string.count)
+        var resultString = regex.stringByReplacingMatches(in: string, options: [], range: range, withTemplate: "")
+        resultString = resultString.components(separatedBy: .whitespacesAndNewlines).filter({!$0.isEmpty}).joined(separator: " ")
+        return resultString
+    }
+}
+//MARK: - Record
 extension RecordingView {
     fileprivate func playAudio(urlString: String) {
         let videoURL = URL(string: urlString)
-        let newPlayer = AVPlayer(url: videoURL!)
+        let playerItem: AVPlayerItem = AVPlayerItem(url: videoURL!)
+        let newPlayer = AVPlayer(playerItem: playerItem)
         self.player = newPlayer
         self.player?.play()
         let playerLayer = AVPlayerLayer(player: self.player)
@@ -211,61 +412,84 @@ extension RecordingView {
             print(String(describing: Self.self) ,#function, "ERROR: Cannot load WINDOW view")
         }
         self.player?.addObserver(self, forKeyPath: "timeControlStatus", options: [.old, .new], context: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(endPlayVideo), name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        self.addPeriodicTimeObserver()
     }
     
     fileprivate func showCameraPreview() {
-        let captureSession = AVCaptureSession()
-        
-        // Preset For 720p
-        captureSession.sessionPreset = AVCaptureSession.Preset.hd1280x720
-        
-        let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .front)
-        // Video Input
-        let videoInput: AVCaptureDeviceInput
-        do {
-            videoInput = try AVCaptureDeviceInput(device: camera!)
+//        DispatchQueue.main.async {
+            let captureSession = AVCaptureSession()
             
-            // Add Video Input
-            if captureSession.canAddInput(videoInput) {
-                captureSession.addInput(videoInput)
-            } else {
-                print(String(describing: Self.self) ,#function, "ERROR: Can't add video input")
+            // Preset For 720p
+            captureSession.sessionPreset = AVCaptureSession.Preset.hd1280x720
+            
+            let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .front)
+            // Video Input
+            let videoInput: AVCaptureDeviceInput
+            do {
+                videoInput = try AVCaptureDeviceInput(device: camera!)
+                
+                // Add Video Input
+                if captureSession.canAddInput(videoInput) {
+                    captureSession.addInput(videoInput)
+                } else {
+                    print(String(describing: Self.self) ,#function, "ERROR: Can't add video input")
+                }
+            }
+            catch let error {
+                print(String(describing: Self.self) ,#function, "ERROR: Getting input device: \(error)")
+            }
+            
+            // Audio Input
+            guard let audioInputDevice = AVCaptureDevice.default(for: AVMediaType.audio) else { return }
+            do {
+                let audioInput = try AVCaptureDeviceInput(device: audioInputDevice)
+                
+                // Add Audio Input
+                if captureSession.canAddInput(audioInput) {
+                    captureSession.addInput(audioInput)
+                } else {
+                    print(String(describing: Self.self) ,#function, "Can't Add Audio Input")
+                }
+            } catch let error {
+                print(String(describing: Self.self) ,#function, "Error Getting Input Device: \(error)")
+            }
+            
+            // Video Output
+            self.videoFileOutput = AVCaptureMovieFileOutput()
+            captureSession.addOutput(self.videoFileOutput!)
+            
+            // Show Camera Preview
+            self.cameraPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+            self.layer.addSublayer(self.cameraPreviewLayer!)
+            self.cameraPreviewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
+            let width = self.bounds.width
+            let height = self.bounds.height * 0.75
+            let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height
+            self.cameraPreviewLayer?.frame = CGRect(x: 0, y: yPosition, width: width, height: height)
+            
+            // Bring Record Button To Front & Start Session
+            captureSession.startRunning()
+            print(captureSession.inputs)
+//        }
+    }
+    
+    func addPeriodicTimeObserver() {
+        if let player = self.player {
+            let timeScale = CMTimeScale(NSEC_PER_SEC)
+            let time = CMTime(seconds: 0.25, preferredTimescale: timeScale)
+
+            timeObserverToken = player.addPeriodicTimeObserver(forInterval: time, queue: .main) { time in
+                self.updateHighlightLyrics(time: CMTimeGetSeconds(time))
             }
         }
-        catch let error {
-            print(String(describing: Self.self) ,#function, "ERROR: Getting input device: \(error)")
+    }
+
+    func removePeriodicTimeObserver() {
+        if let player = self.player, let timeObserverToken = timeObserverToken {
+            player.removeTimeObserver(timeObserverToken)
+            self.timeObserverToken = nil
         }
-        
-        // Audio Input
-        guard let audioInputDevice = AVCaptureDevice.default(for: AVMediaType.audio) else { return }
-        do {
-            let audioInput = try AVCaptureDeviceInput(device: audioInputDevice)
-            
-            // Add Audio Input
-            if captureSession.canAddInput(audioInput) {
-                captureSession.addInput(audioInput)
-            } else {
-                print(String(describing: Self.self) ,#function, "Can't Add Audio Input")
-            }
-        } catch let error {
-            print(String(describing: Self.self) ,#function, "Error Getting Input Device: \(error)")
-        }
-        
-        // Video Output
-        videoFileOutput = AVCaptureMovieFileOutput()
-        captureSession.addOutput(videoFileOutput!)
-        
-        // Show Camera Preview
-        cameraPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        self.layer.addSublayer(cameraPreviewLayer!)
-        cameraPreviewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
-        let width = self.bounds.width
-        let height = self.bounds.height
-        cameraPreviewLayer?.frame = CGRect(x: 0, y: 0, width: width, height: height)
-        
-        // Bring Record Button To Front & Start Session
-        captureSession.startRunning()
-        print(captureSession.inputs)
     }
 }
 
@@ -275,6 +499,7 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
         print(String(describing: Self.self) ,#function, "1.didStartRecordingTo: \(Date().timeIntervalSince1970 * 1000)")
         if let player = self.player {
             player.playImmediately(atRate: 1.0)
+            player.seek(to: CMTime(seconds: 196.0, preferredTimescale: CMTimeScale(1.0)))
         }
     }
     
@@ -283,6 +508,10 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
             print(String(describing: Self.self) ,#function, "ERROR: didFinishRecordingTo: \(error.localizedDescription)")
         }
         else {
+            if self.isCancelRecording {
+                self.isCancelRecording = false
+                return
+            }
             print(String(describing: Self.self) ,#function, "outputFileURL: \(outputFileURL)")
             self.encodeVideo(at: outputFileURL) { (url, error) in
                 if let error = error {
@@ -372,5 +601,51 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
                 default: break
             }
         })
+    }
+}
+
+struct Lyrics : Codable {
+    let content : String?
+    let end : Double?
+    let start : Double?
+    let data: [Lyrics]?
+    enum CodingKeys: String, CodingKey {
+        case content = "content"
+        case end = "end"
+        case start = "start"
+        case data = "data"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        content = try values.decodeIfPresent(String.self, forKey: .content)
+        end = try values.decodeIfPresent(Double.self, forKey: .end)
+        start = try values.decodeIfPresent(Double.self, forKey: .start)
+        data = try (values.decodeIfPresent([Lyrics].self, forKey: .data))
+    }
+}
+
+//MARK: - UIScrollViewDelegate
+extension RecordingView: UITextViewDelegate {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        print("_scrollViewWillBeginDragging_")
+        self.isUserScroll = true
+    }
+    
+    func scrollViewWillBeginDecelerating(_ scrollView: UIScrollView) {
+        print("_scrollViewWillBeginDecelerating_")
+        self.isUserScroll = true
+    }
+    
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if (!decelerate) {
+            print("_scrollViewDidEndDragging_")
+            self.isUserScroll = false
+        }
+    }
+    
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        print("_scrollViewDidEndDecelerating_")
+        self.isUserScroll = false
     }
 }
