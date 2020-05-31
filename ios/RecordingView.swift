@@ -499,7 +499,6 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
         print(String(describing: Self.self) ,#function, "1.didStartRecordingTo: \(Date().timeIntervalSince1970 * 1000)")
         if let player = self.player {
             player.playImmediately(atRate: 1.0)
-            player.seek(to: CMTime(seconds: 196.0, preferredTimescale: CMTimeScale(1.0)))
         }
     }
     
