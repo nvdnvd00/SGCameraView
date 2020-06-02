@@ -28,6 +28,8 @@ class RecordingView: UIView {
   private var timeObserverToken: Any?
   private var isUserScroll: Bool = false
   private var isCancelRecording: Bool = false
+  private let TIME_CONTROL_STATUS_KEY = "timeControlStatus"
+  private var isAddObserver: Bool = false
     
   override func draw(_ rect: CGRect) {
       print(String(describing: Self.self) ,#function, "TN_TEST: \(rect)")
@@ -108,10 +110,12 @@ class RecordingView: UIView {
   
   func stopRecording() {
     DispatchQueue.main.async {
-      self.videoFileOutput?.stopRecording()
+      if let videoFileOutput = self.videoFileOutput, videoFileOutput.isRecording {
+        videoFileOutput.stopRecording()
+      }
       if let player = self.player {
           player.pause()
-          self.removePeriodicTimeObserver()
+          self.removePlayerObserver()
       }
     }
   }
@@ -119,18 +123,21 @@ class RecordingView: UIView {
     @objc func cancelRecording() {
         print(String(describing: Self.self) ,#function)
         isCancelRecording = true
-        if let output = self.videoFileOutput {
+        if let output = self.videoFileOutput, output.isRecording {
             output.stopRecording()
         }
         if let player = self.player, player.rate > 0 {
             player.pause()
-            self.removePeriodicTimeObserver()
+            self.removePlayerObserver()
         }
     }
     
     @objc func endPlayVideo() {
-        print("____endPlayVideo")
-        self.ontapRecodingButton(sender: self.btnRecord)
+        if self.btnRecord.isSelected {
+            print("____endPlayVideo")
+            stopRecording()
+            self.btnRecord.isSelected = false
+        }
     }
     
   fileprivate func realStartRecording() {
@@ -146,7 +153,7 @@ class RecordingView: UIView {
   }
   
   override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-      if let player =  object as? AVPlayer, keyPath == "timeControlStatus" {
+      if let player =  object as? AVPlayer, keyPath == TIME_CONTROL_STATUS_KEY {
           if player.timeControlStatus == .playing {
               if let videoFileOutput = self.videoFileOutput, !videoFileOutput.isRecording {
                   player.pause()
@@ -158,13 +165,22 @@ class RecordingView: UIView {
       }
   }
     
+    private func removePlayerObserver() {
+        if !self.isAddObserver { return }
+        if let player = self.player {
+            player.removeObserver(self, forKeyPath: TIME_CONTROL_STATUS_KEY)
+        }
+        removePeriodicTimeObserver()
+        NotificationCenter.default.removeObserver(self)
+        self.isAddObserver = false
+    }
+    
     deinit {
         removePeriodicTimeObserver()
         
         print(String(describing: Self.self) ,#function, "TN_TEST")
         videoFileOutput = nil
         
-        player?.removeObserver(self, forKeyPath: "timeControlStatus")
         player = nil
         
         cameraPreviewLayer?.removeFromSuperlayer()
@@ -176,7 +192,7 @@ class RecordingView: UIView {
         self.txvLyrics.removeFromSuperview()
         self.vwLyrics.removeFromSuperview()
         
-        NotificationCenter.default.removeObserver(self)
+        removePlayerObserver()
     }
 }
 
@@ -287,23 +303,29 @@ extension RecordingView {
         
         let (highlightHalf, normalHalf) = self.getStatusTextHalfSentence(array: self.arrLyricsModel, time: time)
         if highlightLyricsString.count > 0 {
-            highlightLyricsString.append(" ")
+            highlightLyricsString.append("\n")
         }
         highlightLyricsString.append(highlightHalf)
-        
+        if highlightHalf.count > 0 && normalHalf.count > 0 {
+            highlightLyricsString.append(" ")
+        }
+        else if highlightHalf.count > 0 || normalHalf.count > 0{
+            highlightLyricsString.append("\n")
+        }
         normalLyricsString.append(normalHalf)
-        if normalLyricsString.count > 0 {
-            normalLyricsString.append(" ")
+        let newNormalTextFullSentence = self.getNormalTextFullSentence(array: self.arrLyricsModel, time: time)
+        if newNormalTextFullSentence.count > 0 {
+            if normalLyricsString.count > 0  {
+                normalLyricsString.append("\n")
+            }
+            normalLyricsString.append(newNormalTextFullSentence)
         }
-        normalLyricsString.append(self.getNormalTextFullSentence(array: self.arrLyricsModel, time: time))
         
-        var finalString = highlightLyricsString
-        if finalString.count > 0 {
-            finalString.append(" ")
-        }
-        finalString.append(normalLyricsString)
+        var finalString = highlightLyricsString + normalLyricsString
+        finalString = finalString.trimmingCharacters(in: .whitespacesAndNewlines)
         
         //Scroll
+        /*
         if self.isUserScroll == false && finalString.count > 0 {
             let percentHilightText: Double = Double(highlightLyricsString.count) / Double(finalString.count)
             let highlightPosition = CGFloat(percentHilightText) * self.txvLyrics.contentSize.height
@@ -314,6 +336,21 @@ extension RecordingView {
             }
             let visibleFrame = CGRect(x: 0, y: yPosition, width: self.txvLyrics.frame.size.width, height: height)
             self.txvLyrics.scrollRectToVisible(visibleFrame, animated: true)
+        }
+         */
+        if self.isUserScroll == false && finalString.count > 0 {
+            if let endPos = txvLyrics.position(from: txvLyrics.beginningOfDocument, offset: highlightLyricsString.count), let textRange = txvLyrics.textRange(from: txvLyrics.beginningOfDocument, to: endPos) {
+                let lyricsHeight = self.txvLyrics.frame.size.height
+                let rect = txvLyrics.firstRect(for: textRange)
+                if rect.height > lyricsHeight / 2 {
+                    var yPosition = rect.height - lyricsHeight / 2
+                    if (yPosition + lyricsHeight) >= self.txvLyrics.contentSize.height {
+                        yPosition = self.txvLyrics.contentSize.height - lyricsHeight
+                    }
+                    let visibleFrame = CGRect(x: 0, y: yPosition, width: self.txvLyrics.frame.size.width, height: lyricsHeight)
+                    self.txvLyrics.scrollRectToVisible(visibleFrame, animated: true)
+                }
+            }
         }
         
         let finalAttributeString = NSMutableAttributedString(string: finalString)
@@ -338,7 +375,7 @@ extension RecordingView {
         for lyrics in highlightTextFullSentence {
             if let content = lyrics.content {
                 if highlightLyricsString.count > 0 {
-                    highlightLyricsString.append(" ")
+                    highlightLyricsString.append("\n")
                 }
                 highlightLyricsString.append(self.removeTimeInString(string: content))
             }
@@ -379,7 +416,7 @@ extension RecordingView {
         for lyrics in normalTextFullSentence {
             if let content = lyrics.content {
                 if normalLyricsString.count > 0 {
-                    normalLyricsString.append(" ")
+                    normalLyricsString.append("\n")
                 }
                 normalLyricsString.append(self.removeTimeInString(string: content))
             }
@@ -411,9 +448,10 @@ extension RecordingView {
         else {
             print(String(describing: Self.self) ,#function, "ERROR: Cannot load WINDOW view")
         }
-        self.player?.addObserver(self, forKeyPath: "timeControlStatus", options: [.old, .new], context: nil)
+        self.player?.addObserver(self, forKeyPath: TIME_CONTROL_STATUS_KEY, options: [.old, .new], context: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(endPlayVideo), name: .AVPlayerItemDidPlayToEndTime, object: nil)
         self.addPeriodicTimeObserver()
+        self.isAddObserver = true
     }
     
     fileprivate func showCameraPreview() {
@@ -423,11 +461,14 @@ extension RecordingView {
             // Preset For 720p
             captureSession.sessionPreset = AVCaptureSession.Preset.hd1280x720
             
-            let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .front)
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .front) else {
+            print(String(describing: Self.self) ,#function, "Current Device does not support camera!")
+            return
+        }
             // Video Input
             let videoInput: AVCaptureDeviceInput
             do {
-                videoInput = try AVCaptureDeviceInput(device: camera!)
+                videoInput = try AVCaptureDeviceInput(device: camera)
                 
                 // Add Video Input
                 if captureSession.canAddInput(videoInput) {
