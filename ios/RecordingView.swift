@@ -365,7 +365,9 @@ extension RecordingView {
             finalAttributeString.addAttributes([.foregroundColor : self.lyricsNormalColor], range: NSRange(location: highlightLyricsString.count, length: normalLyricsString.count))
         }
         let font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-        finalAttributeString.addAttributes([.font : font], range: NSRange(location: 0, length: finalString.count))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        finalAttributeString.addAttributes([.font : font, .paragraphStyle: paragraph], range: NSRange(location: 0, length: finalString.count))
         self.txvLyrics.attributedText = finalAttributeString
     }
     
