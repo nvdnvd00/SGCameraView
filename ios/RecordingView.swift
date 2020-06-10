@@ -341,9 +341,11 @@ extension RecordingView {
         if self.isUserScroll == false && finalString.count > 0 {
             if let endPos = txvLyrics.position(from: txvLyrics.beginningOfDocument, offset: highlightLyricsString.count), let textRange = txvLyrics.textRange(from: txvLyrics.beginningOfDocument, to: endPos) {
                 let lyricsHeight = self.txvLyrics.frame.size.height
-                let rect = txvLyrics.firstRect(for: textRange)
-                if rect.height > lyricsHeight / 2 {
-                    var yPosition = rect.height - lyricsHeight / 2
+                
+//                let rect = txvLyrics.firstRect(for: textRange)
+                let rect = txvLyrics.caretRect(for: textRange.end)
+                if rect.origin.y > lyricsHeight / 2 {
+                    var yPosition = rect.origin.y - lyricsHeight / 2
                     if (yPosition + lyricsHeight) >= self.txvLyrics.contentSize.height {
                         yPosition = self.txvLyrics.contentSize.height - lyricsHeight
                     }
