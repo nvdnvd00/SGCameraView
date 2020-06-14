@@ -30,14 +30,13 @@ class RecordingView: UIView {
   private var isCancelRecording: Bool = false
   private let TIME_CONTROL_STATUS_KEY = "timeControlStatus"
   private var isAddObserver: Bool = false
+  private var latencyTime: Double = 0.0
     
   override func draw(_ rect: CGRect) {
-      print(String(describing: Self.self) ,#function, "TN_TEST: \(rect)")
       updateLayout()
   }
     override func layoutSubviews() {
         super.layoutSubviews()
-        print(String(describing: Self.self) ,#function, "TN_TEST: \(self.frame)")
         updateLayout()
     }
     
@@ -48,7 +47,6 @@ class RecordingView: UIView {
     
     override func reactSetFrame(_ frame: CGRect) {
         super.reactSetFrame(frame)
-        print(String(describing: Self.self) ,#function, "TN_TEST: \(frame)")
         self.frame = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
         updateLayout()
     }
@@ -161,6 +159,9 @@ class RecordingView: UIView {
                   return
               }
               print(String(describing: Self.self) ,#function, "2.is playing audio: \(Date().timeIntervalSince1970 * 1000)")
+            let latency = Date().timeIntervalSince1970 * 1000
+            self.latencyTime = latency - self.latencyTime
+            print(String(describing: Self.self) ,#function, "REAL_LATENCY: \(self.latencyTime.rounded())")
           }
       }
   }
@@ -541,8 +542,10 @@ extension RecordingView {
 //MARK: - AVCaptureFileOutputRecordingDelegate
 extension RecordingView: AVCaptureFileOutputRecordingDelegate {
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        print(String(describing: Self.self) ,#function, "1.didStartRecordingTo: \(Date().timeIntervalSince1970 * 1000)")
+        self.latencyTime = Date().timeIntervalSince1970 * 1000
+        print(String(describing: Self.self) ,#function, "1.didStartRecordingTo: \(self.latencyTime)")
         if let player = self.player {
+            player.seek(to: CMTime(seconds: 0.0, preferredTimescale: CMTimeScale(1.0)))
             player.playImmediately(atRate: 1.0)
         }
     }
@@ -565,7 +568,7 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
                 if let url = url {
                     print(String(describing: Self.self) ,#function, "MOV to MP4: \(url.path)")
                     if let completion = self.onRecordingEnd {
-                      completion(["data":["uri": url.path]])
+                        completion(["data":["uri": url.path, "latencyTime": self.latencyTime.rounded()]])
                     }
                 }
             }
@@ -672,24 +675,20 @@ struct Lyrics : Codable {
 //MARK: - UIScrollViewDelegate
 extension RecordingView: UITextViewDelegate {
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-        print("_scrollViewWillBeginDragging_")
         self.isUserScroll = true
     }
     
     func scrollViewWillBeginDecelerating(_ scrollView: UIScrollView) {
-        print("_scrollViewWillBeginDecelerating_")
         self.isUserScroll = true
     }
     
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if (!decelerate) {
-            print("_scrollViewDidEndDragging_")
             self.isUserScroll = false
         }
     }
     
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        print("_scrollViewDidEndDecelerating_")
         self.isUserScroll = false
     }
 }
