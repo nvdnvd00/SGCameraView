@@ -13,3 +13,4 @@
 #import <React/RCTEventEmitter.h>
 #import <React/RCTUIManager.h>
 #import <React/RCTLog.h>
+#import <mobileffmpeg/MobileFFmpeg.h>

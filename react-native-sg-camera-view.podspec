@@ -23,6 +23,7 @@ Pod::Spec.new do |s|
   s.requires_arc = true
 
   s.dependency "React"
+  s.dependency 'mobile-ffmpeg-full-gpl', '~> 4.3.2'
   # ...
   # s.dependency "..."
 end
