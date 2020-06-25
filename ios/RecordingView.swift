@@ -23,6 +23,9 @@ class RecordingView: UIView {
   @objc var onRecordingEnd: RCTDirectEventBlock?
   @objc var lyricsNormalColor: UIColor = .black
   @objc var lyricsHighlightColor: UIColor = .white
+  @objc var delay: Double = 0.0
+  @objc var adjustVolumeMusicVideoIOS: Double = 0.0
+  @objc var adjustVolumeRecordingVideoIOS: Double = 0.0
   
   private var arrLyricsModel: [Lyrics] = []
   private var timeObserverToken: Any?
@@ -579,7 +582,10 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
 //            UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.absoluteString, self, nil, nil)
         }
     }
-    
+}
+
+//MARK: - Handle video/audio
+extension RecordingView {
     @objc func video(videoPath: NSString, didFinishSavingWithError error: NSError?, contextInfo info: AnyObject) {
         if let _ = error {
             print(String(describing: Self.self) ,#function, "Error,Video failed to save")
@@ -644,10 +650,150 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
                 print("Successful!")
                 print(exportSession.outputURL ?? "NO OUTPUT URL")
                 completionHandler?(exportSession.outputURL, nil)
-                    
+                if let videoUrl = exportSession.outputURL, let beat = self.beat {
+                    let delayAdjusment = self.delay + self.latencyTime.rounded()
+                    self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment, completionHandler: completionHandler)
+                }
+                
                 default: break
             }
         })
+    }
+    
+    private func mergeVideoAndAudio(inputVideo: String, beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ((URL?, Error?) -> Void)?) {
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
+        let outputAudioChain = documentsDirectory.appendingPathComponent("audioChain.mp4")
+        if FileManager.default.fileExists(atPath: outputAudioChain.path) {
+            do {
+                try FileManager.default.removeItem(at: outputAudioChain)
+            } catch { }
+        }
+        let outputMerge = documentsDirectory.appendingPathComponent("mergeVideo.mp4")
+        if FileManager.default.fileExists(atPath: outputMerge.path) {
+            do {
+                try FileManager.default.removeItem(at: outputMerge)
+            } catch { }
+        }
+        let threshold = pow(10.0, -15/20.0)
+        let returnCodeAudioChain = MobileFFmpeg.execute("-y -i \(inputVideo) -af acompressor=level_in=2:threshold=\(threshold):attack=10:release=80:detection=0,highpass=f=180,highshelf=g=1.26:f=7000,aecho=1.0:0.7:20:0.5 \(outputAudioChain.path)")
+        
+        if returnCodeAudioChain == RETURN_CODE_SUCCESS {
+            let returnCodeMerge = MobileFFmpeg.execute("-y -i \(outputAudioChain.path) -i \(beat) -filter_complex [0:a]volume=\(adjustVolumeRecordingVideoIOS)dB[a0];[1:a]volume=\(adjustVolumeMusicVideoIOS)dB[b0];[b0]adelay=\(abs(delay))|\(abs(delay))[b1];[a0[b1]amerge=inputs=2 -b:a 320k -ac 2 -c:v copy -preset ultrafast -movflags +faststart <output2>")
+            if returnCodeMerge == RETURN_CODE_SUCCESS {
+                print(String(describing: Self.self) ,#function, "MERGE VIDEO SUCCESS")
+                completionHandler?(outputMerge, nil)
+                return
+            }
+            else if returnCodeMerge == RETURN_CODE_CANCEL {
+                print(String(describing: Self.self) ,#function, "Command execution cancelled by user.")
+            }
+            else {
+                print("Command execution failed with rc=\(returnCodeMerge) and output=\(String(describing: MobileFFmpegConfig.getLastCommandOutput()))")
+            }
+        }
+        else if returnCodeAudioChain == RETURN_CODE_CANCEL {
+            print(String(describing: Self.self) ,#function, "Command execution cancelled by user.")
+        }
+        else {
+            print("Command execution failed with rc=\(returnCodeAudioChain) and output=\(String(describing: MobileFFmpegConfig.getLastCommandOutput()))")
+        }
+        completionHandler?(nil, nil)
+    }
+    
+    func mergeVideoAndAudio(videoUrl: URL,
+                            audioUrl: URL,
+                            shouldFlipHorizontally: Bool = false,
+                            completion: @escaping (_ error: Error?, _ url: URL?) -> Void) {
+
+        let mixComposition = AVMutableComposition()
+        var mutableCompositionVideoTrack = [AVMutableCompositionTrack]()
+        var mutableCompositionAudioTrack = [AVMutableCompositionTrack]()
+        var mutableCompositionAudioOfVideoTrack = [AVMutableCompositionTrack]()
+
+        //start merge
+
+        let aVideoAsset = AVAsset(url: videoUrl)
+        let aAudioAsset = AVAsset(url: audioUrl)
+
+        guard let compositionAddVideo = mixComposition.addMutableTrack(withMediaType: AVMediaType.video,
+                                                                       preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
+
+        guard let compositionAddAudio = mixComposition.addMutableTrack(withMediaType: AVMediaType.audio,
+                                                                       preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
+
+        guard let compositionAddAudioOfVideo = mixComposition.addMutableTrack(withMediaType: AVMediaType.audio,
+                                                                              preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
+
+        let aVideoAssetTrack: AVAssetTrack = aVideoAsset.tracks(withMediaType: AVMediaType.video)[0]
+        let aAudioOfVideoAssetTrack: AVAssetTrack? = aVideoAsset.tracks(withMediaType: AVMediaType.audio).first
+        let aAudioAssetTrack: AVAssetTrack = aAudioAsset.tracks(withMediaType: AVMediaType.audio)[0]
+
+        // Default must have tranformation
+        compositionAddVideo.preferredTransform = aVideoAssetTrack.preferredTransform
+
+        if shouldFlipHorizontally {
+            // Flip video horizontally
+            var frontalTransform: CGAffineTransform = CGAffineTransform(scaleX: -1.0, y: 1.0)
+            frontalTransform = frontalTransform.translatedBy(x: -aVideoAssetTrack.naturalSize.width, y: 0.0)
+            frontalTransform = frontalTransform.translatedBy(x: 0.0, y: -aVideoAssetTrack.naturalSize.width)
+            compositionAddVideo.preferredTransform = frontalTransform
+        }
+
+        mutableCompositionVideoTrack.append(compositionAddVideo)
+        mutableCompositionAudioTrack.append(compositionAddAudio)
+        mutableCompositionAudioOfVideoTrack.append(compositionAddAudioOfVideo)
+
+        do {
+            try mutableCompositionVideoTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero,
+                                                                                aVideoAssetTrack.timeRange.duration),
+                                                                of: aVideoAssetTrack,
+                                                                at: kCMTimeZero)
+
+            //In my case my audio file is longer then video file so i took videoAsset duration
+            //instead of audioAsset duration
+            try mutableCompositionAudioTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero,
+                                                                                aVideoAssetTrack.timeRange.duration),
+                                                                of: aAudioAssetTrack,
+                                                                at: kCMTimeZero)
+
+            // adding audio (of the video if exists) asset to the final composition
+            if let aAudioOfVideoAssetTrack = aAudioOfVideoAssetTrack {
+                try mutableCompositionAudioOfVideoTrack[0].insertTimeRange(CMTimeRangeMake(kCMTimeZero,
+                                                                                           aVideoAssetTrack.timeRange.duration),
+                                                                           of: aAudioOfVideoAssetTrack,
+                                                                           at: kCMTimeZero)
+            }
+        } catch {
+            print(error.localizedDescription)
+        }
+
+        // Exporting
+        let savePathUrl: URL = URL(fileURLWithPath: NSHomeDirectory() + "/Documents/newVideo.mp4")
+        do { // delete old video
+            try FileManager.default.removeItem(at: savePathUrl)
+        } catch { print(error.localizedDescription) }
+
+        let assetExport: AVAssetExportSession = AVAssetExportSession(asset: mixComposition, presetName: AVAssetExportPresetHighestQuality)!
+        assetExport.outputFileType = AVFileType.mp4
+        assetExport.outputURL = savePathUrl
+        assetExport.shouldOptimizeForNetworkUse = true
+
+        assetExport.exportAsynchronously { () -> Void in
+            switch assetExport.status {
+            case AVAssetExportSessionStatus.completed:
+                print("success")
+                completion(nil, savePathUrl)
+            case AVAssetExportSessionStatus.failed:
+                print("failed \(assetExport.error?.localizedDescription ?? "error nil")")
+                completion(assetExport.error, nil)
+            case AVAssetExportSessionStatus.cancelled:
+                print("cancelled \(assetExport.error?.localizedDescription ?? "error nil")")
+                completion(assetExport.error, nil)
+            default:
+                print("complete")
+                completion(assetExport.error, nil)
+            }
+        }
     }
 }
 

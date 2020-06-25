@@ -14,6 +14,9 @@ class RecordingManager: RCTViewManager {
   @objc var beat: String?
   @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
+  @objc var delay: Double = 0.0
+  @objc var adjustVolumeMusicVideoIOS: Double = 0.0
+  @objc var adjustVolumeRecordingVideoIOS: Double = 0.0
     
   private var recordingView: RecordingView?
   
@@ -22,6 +25,9 @@ class RecordingManager: RCTViewManager {
       recordingView.beat = self.beat
       recordingView.lyric = self.lyric
       recordingView.onRecordingEnd = self.onRecordingEnd
+      recordingView.delay = self.delay
+      recordingView.adjustVolumeMusicVideoIOS = self.adjustVolumeMusicVideoIOS
+      recordingView.adjustVolumeRecordingVideoIOS = self.adjustVolumeRecordingVideoIOS
       self.recordingView = recordingView
       return self.recordingView!
     }

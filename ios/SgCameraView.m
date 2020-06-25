@@ -15,5 +15,8 @@
 RCT_EXPORT_VIEW_PROPERTY(beat, NSString)
 RCT_EXPORT_VIEW_PROPERTY(lyric, NSArray)
 RCT_EXPORT_VIEW_PROPERTY(onRecordingEnd, RCTDirectEventBlock)
+RCT_EXPORT_VIEW_PROPERTY(delay, double)
+RCT_EXPORT_VIEW_PROPERTY(adjustVolumeMusicVideoIOS, double)
+RCT_EXPORT_VIEW_PROPERTY(adjustVolumeRecordingVideoIOS, double)
 RCT_EXTERN_METHOD(cancelRecord)
 @end
