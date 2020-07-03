@@ -296,6 +296,14 @@ extension RecordingView {
             }
         }
     }
+    
+    fileprivate func setHiddenLoadingView(status: Bool) {
+        DispatchQueue.main.async {
+            if let loadingView = self.loadingView {
+                loadingView.isHidden = status
+            }
+        }
+    }
 }
 //MARK: - Update highlight lyrics
 extension RecordingView {
@@ -603,6 +611,8 @@ extension RecordingView {
     }
     
     func encodeVideo(at videoURL: URL, completionHandler: ((URL?, Error?) -> Void)?)  {
+        self.setHiddenLoadingView(status: false)
+        
         let avAsset = AVURLAsset(url: videoURL, options: nil)
             
         let startDate = Date()
@@ -638,9 +648,11 @@ extension RecordingView {
             case .failed:
                 print(exportSession.error ?? "NO ERROR")
                 completionHandler?(nil, exportSession.error)
+                self.setHiddenLoadingView(status: true)
             case .cancelled:
                 print("Export canceled")
                 completionHandler?(nil, nil)
+                self.setHiddenLoadingView(status: true)
             case .completed:
                 //Video conversion finished
                 let endDate = Date()
@@ -649,10 +661,12 @@ extension RecordingView {
                 print(time)
                 print("Successful!")
                 print(exportSession.outputURL ?? "NO OUTPUT URL")
-                completionHandler?(exportSession.outputURL, nil)
                 if let videoUrl = exportSession.outputURL, let beat = self.beat {
                     let delayAdjusment = self.delay + self.latencyTime.rounded()
-                    self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment, completionHandler: completionHandler)
+                    self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (url, error) in
+                        self.setHiddenLoadingView(status: true)
+                        completionHandler?(url, error)
+                    }
                 }
                 
                 default: break
@@ -678,7 +692,7 @@ extension RecordingView {
         let returnCodeAudioChain = MobileFFmpeg.execute("-y -i \(inputVideo) -af acompressor=level_in=2:threshold=\(threshold):attack=10:release=80:detection=0,highpass=f=180,highshelf=g=1.26:f=7000,aecho=1.0:0.7:20:0.5 \(outputAudioChain.path)")
         
         if returnCodeAudioChain == RETURN_CODE_SUCCESS {
-            let returnCodeMerge = MobileFFmpeg.execute("-y -i \(outputAudioChain.path) -i \(beat) -filter_complex [0:a]volume=\(adjustVolumeRecordingVideoIOS)dB[a0];[1:a]volume=\(adjustVolumeMusicVideoIOS)dB[b0];[b0]adelay=\(abs(delay))|\(abs(delay))[b1];[a0[b1]amerge=inputs=2 -b:a 320k -ac 2 -c:v copy -preset ultrafast -movflags +faststart <output2>")
+            let returnCodeMerge = MobileFFmpeg.execute("-y -i \(outputAudioChain.path) -i \(beat) -filter_complex [0:a]volume=\(adjustVolumeRecordingVideoIOS)dB[a0];[1:a]volume=\(adjustVolumeMusicVideoIOS)dB[b0];[b0]adelay=\(abs(delay))|\(abs(delay))[b1];[a0][b1]amerge=inputs=2 -b:a 320k -ac 2 -c:v copy -preset ultrafast -movflags +faststart \(outputMerge.path)")
             if returnCodeMerge == RETURN_CODE_SUCCESS {
                 print(String(describing: Self.self) ,#function, "MERGE VIDEO SUCCESS")
                 completionHandler?(outputMerge, nil)
