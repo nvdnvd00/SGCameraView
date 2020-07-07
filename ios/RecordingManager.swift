@@ -41,4 +41,10 @@ class RecordingManager: RCTViewManager {
             recordingView.cancelRecording()
         }
     }
+    
+    @objc func remerge(adjustment: Double, callback: @escaping RCTResponseSenderBlock) {
+        if let recordingView = self.recordingView {
+            recordingView.remerge(adjustment: adjustment, callback: callback)
+        }
+    }
 }

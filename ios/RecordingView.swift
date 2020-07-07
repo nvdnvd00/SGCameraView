@@ -34,6 +34,8 @@ class RecordingView: UIView {
   private let TIME_CONTROL_STATUS_KEY = "timeControlStatus"
   private var isAddObserver: Bool = false
   private var latencyTime: Double = 0.0
+
+  private var urlAfterRecorded: URL?
     
   override func draw(_ rect: CGRect) {
       updateLayout()
@@ -130,6 +132,23 @@ class RecordingView: UIView {
         if let player = self.player, player.rate > 0 {
             player.pause()
             self.removePlayerObserver()
+        }
+    }
+    
+    @objc func remerge(adjustment: Double, callback: @escaping RCTResponseSenderBlock) {
+        self.delay = adjustment
+        self.setHiddenLoadingView(status: false)
+        if let videoUrl = self.urlAfterRecorded, let beat = self.beat {
+            let delayAdjusment = self.delay + self.latencyTime.rounded()
+            self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (url, error) in
+                self.setHiddenLoadingView(status: true)
+                guard let remergeUrl = url else {
+                    callback([NSNull(), NSNull()])
+                    print(error?.localizedDescription ?? "Something went wrong when remerge video with adjustment \(adjustment)")
+                    return
+                }
+                callback([NSNull(), remergeUrl.path])
+            }
         }
     }
     
@@ -635,7 +654,7 @@ extension RecordingView {
                 completionHandler?(nil, error)
             }
         }
-            
+        self.urlAfterRecorded = filePath
         exportSession.outputURL = filePath
         exportSession.outputFileType = AVFileType.mp4
         exportSession.shouldOptimizeForNetworkUse = true

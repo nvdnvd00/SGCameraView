@@ -19,4 +19,5 @@ RCT_EXPORT_VIEW_PROPERTY(delay, double)
 RCT_EXPORT_VIEW_PROPERTY(adjustVolumeMusicVideoIOS, double)
 RCT_EXPORT_VIEW_PROPERTY(adjustVolumeRecordingVideoIOS, double)
 RCT_EXTERN_METHOD(cancelRecord)
+RCT_EXTERN_METHOD(remerge:(double)adjustment callback:(RCTResponseSenderBlock)callback)
 @end
