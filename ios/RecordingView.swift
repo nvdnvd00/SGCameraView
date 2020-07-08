@@ -135,23 +135,6 @@ class RecordingView: UIView {
         }
     }
     
-    @objc func remerge(adjustment: Double, callback: @escaping RCTResponseSenderBlock) {
-        self.delay = adjustment
-        self.setHiddenLoadingView(status: false)
-        if let videoUrl = self.urlAfterRecorded, let beat = self.beat {
-            let delayAdjusment = self.delay + self.latencyTime.rounded()
-            self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (url, error) in
-                self.setHiddenLoadingView(status: true)
-                guard let remergeUrl = url else {
-                    callback([NSNull(), NSNull()])
-                    print(error?.localizedDescription ?? "Something went wrong when remerge video with adjustment \(adjustment)")
-                    return
-                }
-                callback([NSNull(), remergeUrl.path])
-            }
-        }
-    }
-    
     @objc func endPlayVideo() {
         if self.btnRecord.isSelected {
             print("____endPlayVideo")
@@ -590,15 +573,15 @@ extension RecordingView: AVCaptureFileOutputRecordingDelegate {
                 return
             }
             print(String(describing: Self.self) ,#function, "outputFileURL: \(outputFileURL)")
-            self.encodeVideo(at: outputFileURL) { (url, error) in
+            self.encodeVideo(at: outputFileURL) { (videoUrl, mergedUrl, error) in
                 if let error = error {
                     print(String(describing: Self.self) ,#function, "ERROR: Conver MOV to MP4: \(error.localizedDescription)")
                     return
                 }
-                if let url = url {
-                    print(String(describing: Self.self) ,#function, "MOV to MP4: \(url.path)")
+                if let videoUrl = videoUrl, let mergedUrl = mergedUrl {
+                    print(String(describing: Self.self) ,#function, "MOV to MP4: \(mergedUrl.path)")
                     if let completion = self.onRecordingEnd {
-                        completion(["data":["uri": url.path, "latencyTime": self.latencyTime.rounded()]])
+                        completion(["data":["recordedUrl": videoUrl.path, "mergedUrl": mergedUrl.path, "latencyTime": self.latencyTime.rounded()]])
                     }
                 }
             }
@@ -629,7 +612,7 @@ extension RecordingView {
         }
     }
     
-    func encodeVideo(at videoURL: URL, completionHandler: ((URL?, Error?) -> Void)?)  {
+    func encodeVideo(at videoURL: URL, completionHandler: ((URL?, URL?, Error?) -> Void)?)  {
         self.setHiddenLoadingView(status: false)
         
         let avAsset = AVURLAsset(url: videoURL, options: nil)
@@ -638,7 +621,7 @@ extension RecordingView {
             
         //Create Export session
         guard let exportSession = AVAssetExportSession(asset: avAsset, presetName: AVAssetExportPresetPassthrough) else {
-            completionHandler?(nil, nil)
+            completionHandler?(nil, nil, nil)
             return
         }
             
@@ -651,7 +634,7 @@ extension RecordingView {
             do {
                 try FileManager.default.removeItem(at: filePath)
             } catch {
-                completionHandler?(nil, error)
+                completionHandler?(nil, nil, error)
             }
         }
         self.urlAfterRecorded = filePath
@@ -666,11 +649,11 @@ extension RecordingView {
             switch exportSession.status {
             case .failed:
                 print(exportSession.error ?? "NO ERROR")
-                completionHandler?(nil, exportSession.error)
+                completionHandler?(nil, nil, exportSession.error)
                 self.setHiddenLoadingView(status: true)
             case .cancelled:
                 print("Export canceled")
-                completionHandler?(nil, nil)
+                completionHandler?(nil, nil, nil)
                 self.setHiddenLoadingView(status: true)
             case .completed:
                 //Video conversion finished
@@ -682,9 +665,9 @@ extension RecordingView {
                 print(exportSession.outputURL ?? "NO OUTPUT URL")
                 if let videoUrl = exportSession.outputURL, let beat = self.beat {
                     let delayAdjusment = self.delay + self.latencyTime.rounded()
-                    self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (url, error) in
+                    self.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (mergedUrl, error) in
                         self.setHiddenLoadingView(status: true)
-                        completionHandler?(url, error)
+                        completionHandler?(videoUrl, mergedUrl, error)
                     }
                 }
                 
@@ -693,7 +676,8 @@ extension RecordingView {
         })
     }
     
-    private func mergeVideoAndAudio(inputVideo: String, beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ((URL?, Error?) -> Void)?) {
+    /// Merge video and audio using MobileFFmpeg lib
+    func mergeVideoAndAudio(inputVideo: String, beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ((URL?, Error?) -> Void)?) {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
         let outputAudioChain = documentsDirectory.appendingPathComponent("audioChain.mp4")
         if FileManager.default.fileExists(atPath: outputAudioChain.path) {
@@ -733,7 +717,8 @@ extension RecordingView {
         completionHandler?(nil, nil)
     }
     
-    func mergeVideoAndAudio(videoUrl: URL,
+    /// Merge video and audio using ios native code
+    private func mergeVideoAndAudio(videoUrl: URL,
                             audioUrl: URL,
                             shouldFlipHorizontally: Bool = false,
                             completion: @escaping (_ error: Error?, _ url: URL?) -> Void) {
