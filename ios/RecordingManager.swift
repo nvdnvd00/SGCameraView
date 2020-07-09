@@ -41,26 +41,4 @@ class RecordingManager: RCTViewManager {
             recordingView.cancelRecording()
         }
     }
-    
-    @objc func remerge(adjustment: Double,
-                       recordedUrl: String,
-                       beat: String,
-                       adjustVolumeRecordingVideoIOS: Double,
-                       adjustVolumeMusicVideoIOS: Double,
-                       callback: @escaping RCTResponseSenderBlock) {
-        if let recordingView = self.recordingView {
-            recordingView.mergeVideoAndAudio(inputVideo: recordedUrl,
-                                             beat: beat,
-                                             adjustVolumeRecordingVideoIOS: adjustVolumeRecordingVideoIOS,
-                                             adjustVolumeMusicVideoIOS: adjustVolumeMusicVideoIOS,
-                                             delay: adjustment) { (url, error) in
-                guard let remergeUrl = url else {
-                    callback([NSNull(), NSNull()])
-                    print(error?.localizedDescription ?? "Something went wrong when remerge video with adjustment \(adjustment)")
-                    return
-                }
-                callback([NSNull(), remergeUrl.path])
-            }
-        }
-    }
 }
