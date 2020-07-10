@@ -677,7 +677,7 @@ extension RecordingView {
     }
     
     /// Merge video and audio using MobileFFmpeg lib
-    static func mergeVideoAndAudio(inputVideo: String, mergeredPath: String? = "", beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ((URL?, Error?) -> Void)?) {
+    static func mergeVideoAndAudio(inputVideo: String, mergeredPath: String? = "", beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ( (URL?, Error?) -> Void)?) {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
         let outputAudioChain = documentsDirectory.appendingPathComponent("audioChain.mp4")
         if FileManager.default.fileExists(atPath: outputAudioChain.path) {
