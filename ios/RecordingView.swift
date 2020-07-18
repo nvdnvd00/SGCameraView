@@ -101,13 +101,7 @@ class RecordingView: UIView {
           print(String(describing: Self.self) ,#function, "ERROR: You must set beat url")
           return
       }
-      guard let loadingView = self.loadingView else {
-        print(String(describing: Self.self) ,#function, "ERROR: Cannot load WINDOW view")
-        return
-      }
-      loadingView.isHidden = false
       self.playAudio(urlString: beat)
-      self.bringSubview(toFront:loadingView)
     }
   }
   
@@ -221,8 +215,8 @@ extension RecordingView {
       stopRecording()
     }
     else {
-      startRecording()
-      sender.isUserInteractionEnabled = false
+        setupCountdownTimer()
+        sender.isUserInteractionEnabled = false
     }
     sender.isSelected = !sender.isSelected
   }
@@ -302,11 +296,47 @@ extension RecordingView {
     fileprivate func setHiddenLoadingView(status: Bool) {
         DispatchQueue.main.async {
             if let loadingView = self.loadingView {
+                self.bringSubview(toFront: loadingView)
                 loadingView.isHidden = status
             }
         }
     }
+    
+    fileprivate func setupCountdownTimer() {
+        DispatchQueue.main.async {
+            let viewMask = UIView(frame: self.bounds)
+            viewMask.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+            self.addSubview(viewMask)
+            
+            let width: CGFloat = 100
+            let height: CGFloat = 100
+            let xAxis = self.bounds.size.width / 2 - width / 2
+            let yAxis = self.bounds.size.height / 2 - height / 2
+            let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
+            let countdownTimer = SRCountdownTimer(frame: frame)
+            countdownTimer.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
+            countdownTimer.labelTextColor = UIColor.red
+            countdownTimer.timerFinishingText = "0"
+            countdownTimer.lineWidth = 4
+            countdownTimer.delegate = self
+            viewMask.addSubview(countdownTimer)
+            
+            countdownTimer.start(beginingValue: 3, interval: 1)
+        }
+    }
 }
+
+//MARK: - SRCountdownTimerDelegate
+extension RecordingView: SRCountdownTimerDelegate {
+    func timerDidEnd(sender: SRCountdownTimer, elapsedTime: TimeInterval) {
+        if let viewMask = sender.superview {
+            sender.removeFromSuperview()
+            viewMask.removeFromSuperview()
+        }
+        self.startRecording()
+    }
+}
+
 //MARK: - Update highlight lyrics
 extension RecordingView {
     fileprivate func updateHighlightLyrics(time: Double = 0.0) {
