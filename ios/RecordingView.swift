@@ -17,6 +17,8 @@ class RecordingView: UIView {
   private var btnRecord = UIButton(type: .custom)
   private var vwLyrics = UIView(frame: .zero)
   private var txvLyrics = UITextView(frame: .zero)
+  private var countdownView: UIView?
+  private var countdownTimer: SRCountdownTimer?
     
   @objc var beat: String?
   @objc var lyric: [Any]?
@@ -83,6 +85,9 @@ class RecordingView: UIView {
         if self.cameraPreviewLayer == nil {
           self.showCameraPreview()
           self.bringSubview(toFront:self.btnRecord)
+        }
+        if self.countdownView == nil {
+            setupCountdownTimer()
         }
     }
     
@@ -215,7 +220,12 @@ extension RecordingView {
       stopRecording()
     }
     else {
-        setupCountdownTimer()
+        if let countdownView = self.countdownView {
+            countdownView.isHidden = false
+        }
+        if let timer = self.countdownTimer {
+            timer.start(beginingValue: 3, interval: 1)
+        }
         sender.isUserInteractionEnabled = false
     }
     sender.isSelected = !sender.isSelected
@@ -303,26 +313,25 @@ extension RecordingView {
     }
     
     fileprivate func setupCountdownTimer() {
-        DispatchQueue.main.async {
-            let viewMask = UIView(frame: self.bounds)
-            viewMask.backgroundColor = UIColor.black.withAlphaComponent(0.75)
-            self.addSubview(viewMask)
-            
-            let width: CGFloat = 100
-            let height: CGFloat = 100
-            let xAxis = self.bounds.size.width / 2 - width / 2
-            let yAxis = self.bounds.size.height / 2 - height / 2
-            let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
-            let countdownTimer = SRCountdownTimer(frame: frame)
-            countdownTimer.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
-            countdownTimer.labelTextColor = UIColor.red
-            countdownTimer.timerFinishingText = "0"
-            countdownTimer.lineWidth = 4
-            countdownTimer.delegate = self
-            viewMask.addSubview(countdownTimer)
-            
-            countdownTimer.start(beginingValue: 3, interval: 1)
-        }
+        
+        self.countdownView = UIView(frame: self.bounds)
+        self.countdownView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        self.addSubview(self.countdownView!)
+        
+        let width: CGFloat = 100
+        let height: CGFloat = 100
+        let xAxis = self.bounds.size.width / 2 - width / 2
+        let yAxis = self.bounds.size.height / 2 - height / 2
+        let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
+        self.countdownTimer = SRCountdownTimer(frame: frame)
+        self.countdownTimer?.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
+        self.countdownTimer?.labelTextColor = UIColor.red
+        self.countdownTimer?.timerFinishingText = "0"
+        self.countdownTimer?.lineWidth = 4
+        self.countdownTimer?.delegate = self
+        self.countdownView?.addSubview(self.countdownTimer!)
+        
+        self.countdownView?.isHidden = true
     }
 }
 
