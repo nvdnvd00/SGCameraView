@@ -7,10 +7,12 @@
 //
 
 import Foundation
+import AudioKit
 
 @objc(RecordingManager)
 class RecordingManager: RCTViewManager {
     
+  @objc var albumPreview: String?
   @objc var beat: String?
   @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
@@ -21,7 +23,9 @@ class RecordingManager: RCTViewManager {
   private var recordingView: RecordingView?
   
     override func view() -> UIView! {
+        AudioKit.engine.reset()
       let recordingView = RecordingView()
+      recordingView.albumPreview = self.albumPreview
       recordingView.beat = self.beat
       recordingView.lyric = self.lyric
       recordingView.onRecordingEnd = self.onRecordingEnd

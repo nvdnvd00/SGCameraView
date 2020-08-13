@@ -12,6 +12,7 @@
 #import <React/RCTLog.h>
 
 @interface RCT_EXTERN_REMAP_MODULE(SgCameraView, RecordingManager, RCTViewManager)
+RCT_EXPORT_VIEW_PROPERTY(albumPreview, NSString)
 RCT_EXPORT_VIEW_PROPERTY(beat, NSString)
 RCT_EXPORT_VIEW_PROPERTY(lyric, NSArray)
 RCT_EXPORT_VIEW_PROPERTY(onRecordingEnd, RCTDirectEventBlock)

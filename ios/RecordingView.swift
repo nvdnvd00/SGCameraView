@@ -7,6 +7,7 @@
 
 import UIKit
 import AVKit
+import AudioKit
 
 class RecordingView: UIView {
   let RECORD_BUTTON_HEIGHT: CGFloat = 60
@@ -17,9 +18,9 @@ class RecordingView: UIView {
   private var btnRecord = UIButton(type: .custom)
   private var vwLyrics = UIView(frame: .zero)
   private var txvLyrics = UITextView(frame: .zero)
-  private var countdownView: UIView?
-  private var countdownTimer: SRCountdownTimer?
-    
+  private var imvAlbumPreview = UIImageView(frame: .zero)
+  
+  @objc var albumPreview: String?
   @objc var beat: String?
   @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
@@ -38,6 +39,16 @@ class RecordingView: UIView {
   private var latencyTime: Double = 0.0
 
   private var urlAfterRecorded: URL?
+    
+  private var mic : AKMicrophone?
+  private var beatPlayer: AKPlayer?
+  private var micMixer: AKMixer!
+  private var recorder: AKNodeRecorder!
+  private var recordPlayer: AKPlayer!
+  private var tape: AKAudioFile!
+  private var micBooster: AKBooster!
+  private var mainMixer: AKMixer!
+  private var periodicFunc: AKPeriodicFunction?
     
   override func draw(_ rect: CGRect) {
       updateLayout()
@@ -66,7 +77,11 @@ class RecordingView: UIView {
   private func setupView()  {
     self.autoresizingMask = [.flexibleHeight, .flexibleWidth]
     setupRecordButton()
-    setupAudioSession()
+    if let beat = self.beat, let _ = URL(string: beat) {
+        self.setupAudioKitRecorder()
+    }
+    
+//    setupAudioSession()
     setupLyricsView()
   }
     
@@ -82,12 +97,13 @@ class RecordingView: UIView {
             self.updateLyricsViewPosition()
             self.updateHighlightLyrics(time: 0.0)
         }
-        if self.cameraPreviewLayer == nil {
-          self.showCameraPreview()
-          self.bringSubview(toFront:self.btnRecord)
-        }
-        if self.countdownView == nil {
-            setupCountdownTimer()
+//        if self.cameraPreviewLayer == nil {
+//          self.showCameraPreview()
+//          self.bringSubview(toFront:self.btnRecord)
+//        }
+        if self.imvAlbumPreview.frame == .zero {
+            self.showAlbumPreview()
+            self.bringSubview(toFront:self.btnRecord)
         }
     }
     
@@ -102,23 +118,28 @@ class RecordingView: UIView {
   
   func startRecording() {
     DispatchQueue.main.async {
-      guard let beat = self.beat else {
-          print(String(describing: Self.self) ,#function, "ERROR: You must set beat url")
-          return
-      }
-      self.playAudio(urlString: beat)
+        self.loadingView?.isHidden = true
+        self.bringSubview(toFront:self.btnRecord)
+        self.btnRecord.isUserInteractionEnabled = true
+        self.startRecordByAudioKit()
+//      guard let beat = self.beat else {
+//          print(String(describing: Self.self) ,#function, "ERROR: You must set beat url")
+//          return
+//      }
+//      self.playAudio(urlString: beat)
     }
   }
   
   func stopRecording() {
     DispatchQueue.main.async {
-      if let videoFileOutput = self.videoFileOutput, videoFileOutput.isRecording {
-        videoFileOutput.stopRecording()
-      }
-      if let player = self.player {
-          player.pause()
-          self.removePlayerObserver()
-      }
+        self.endRecordByAudioKit()
+//      if let videoFileOutput = self.videoFileOutput, videoFileOutput.isRecording {
+//        videoFileOutput.stopRecording()
+//      }
+//      if let player = self.player {
+//          player.pause()
+//          self.removePlayerObserver()
+//      }
     }
   }
     
@@ -191,6 +212,9 @@ class RecordingView: UIView {
         cameraPreviewLayer?.removeFromSuperlayer()
         cameraPreviewLayer = nil
         
+        imvAlbumPreview.frame = .zero
+        imvAlbumPreview.removeFromSuperview()
+        
         loadingView?.removeFromSuperview()
         loadingView = nil
         
@@ -220,12 +244,10 @@ extension RecordingView {
       stopRecording()
     }
     else {
-        if let countdownView = self.countdownView {
-            countdownView.isHidden = false
+        if let beat = self.beat, let _ = URL(string: beat) {
+            self.setupAudioKitRecorder()
         }
-        if let timer = self.countdownTimer {
-            timer.start(beginingValue: 3, interval: 1)
-        }
+        setupCountdownTimer()
         sender.isUserInteractionEnabled = false
     }
     sender.isSelected = !sender.isSelected
@@ -313,27 +335,139 @@ extension RecordingView {
     }
     
     fileprivate func setupCountdownTimer() {
-        
-        self.countdownView = UIView(frame: self.bounds)
-        self.countdownView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
-        self.addSubview(self.countdownView!)
-        
-        let width: CGFloat = 100
-        let height: CGFloat = 100
-        let xAxis = self.bounds.size.width / 2 - width / 2
-        let yAxis = self.bounds.size.height / 2 - height / 2
-        let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
-        self.countdownTimer = SRCountdownTimer(frame: frame)
-        self.countdownTimer?.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
-        self.countdownTimer?.labelTextColor = UIColor.red
-        self.countdownTimer?.timerFinishingText = "0"
-        self.countdownTimer?.lineWidth = 4
-        self.countdownTimer?.delegate = self
-        self.countdownView?.addSubview(self.countdownTimer!)
-        
-        self.countdownView?.isHidden = true
+        DispatchQueue.main.async {
+            let viewMask = UIView(frame: self.bounds)
+            viewMask.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+            self.addSubview(viewMask)
+            
+            let width: CGFloat = 100
+            let height: CGFloat = 100
+            let xAxis = self.bounds.size.width / 2 - width / 2
+            let yAxis = self.bounds.size.height / 2 - height / 2
+            let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
+            let countdownTimer = SRCountdownTimer(frame: frame)
+            countdownTimer.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
+            countdownTimer.labelTextColor = UIColor.red
+            countdownTimer.timerFinishingText = "0"
+            countdownTimer.lineWidth = 4
+            countdownTimer.delegate = self
+            viewMask.addSubview(countdownTimer)
+            
+            countdownTimer.start(beginingValue: 3, interval: 1)
+        }
     }
 }
+//MARK: - AudioKit
+extension RecordingView {
+    private func setupAudioKitRecorder() {
+        do{
+            try AudioKit.stop()
+        }
+        catch{
+            print ("AudioKit stop error")
+        }
+        
+        // Clean tempFiles !
+        AKAudioFile.cleanTempDirectory()
+
+        // Session settings
+        AKSettings.bufferLength = .medium
+
+        do {
+            try AKSettings.setSession(category: .playAndRecord, with: .allowBluetoothA2DP)
+        } catch {
+            AKLog("Could not set session category.")
+        }
+
+        AKSettings.defaultToSpeaker = true
+        self.mic = AKMicrophone()
+        // Patching
+        if let beat = self.beat, let url = URL(string: beat) {
+            let beatFile = try! AKAudioFile(forReading: url)
+            self.beatPlayer = AKPlayer(audioFile: beatFile)
+            self.beatPlayer?.completionHandler = {
+                self.stopRecording()
+                self.btnRecord.isSelected = !self.btnRecord.isSelected
+            }
+            let monoToStereo = AKStereoFieldLimiter(mic, amount: 1)
+            micMixer = AKMixer(monoToStereo, self.beatPlayer!)
+        }
+        else {
+            print("Cannot load beat")
+            let monoToStereo = AKStereoFieldLimiter(mic, amount: 1)
+            micMixer = AKMixer(monoToStereo)
+        }
+        
+        micBooster = AKBooster(micMixer)
+        // Will set the level of microphone monitoring
+        micBooster.gain = 0
+        recorder = try? AKNodeRecorder(node: micMixer)
+        if let file = recorder.audioFile {
+//            file.maxLevel = 6.0
+            recordPlayer = AKPlayer(audioFile: file)
+        }
+
+        mainMixer = AKMixer(micBooster)
+        
+        self.periodicFunc = AKPeriodicFunction(every: 0.25) {
+            let time = self.beatPlayer?.currentTime ?? 0.0
+            print("Beat time: \(time)")
+            self.updateHighlightLyrics(time: time)
+        }
+        
+        AudioKit.output = mainMixer
+        do {
+            self.periodicFunc?.start()
+            if let periodic = self.periodicFunc {
+                try AudioKit.start(withPeriodicFunctions: periodic)
+            }
+            else {
+                try AudioKit.start()
+            }
+        } catch {
+            AKLog("AudioKit did not start!")
+        }
+    }
+    
+    fileprivate func startRecordByAudioKit() {
+        self.mic?.volume = 3
+        if AKSettings.headPhonesPlugged {
+            micBooster.gain = 1
+        }
+        do {
+            self.beatPlayer?.play()
+            try recorder.record()
+        } catch { AKLog("Errored recording.") }
+    }
+    
+    fileprivate func endRecordByAudioKit() {
+        micBooster.gain = 0
+        tape = recorder.audioFile!
+        recordPlayer.load(audioFile: tape)
+
+        if let _ = recordPlayer.audioFile?.duration {
+            self.periodicFunc?.stop()
+            self.beatPlayer?.stop()
+            recorder.stop()
+            tape.exportAsynchronously(name: "TempTestFile.m4a",
+                                      baseDir: .documents,
+                                      exportFormat: .m4a) { audioFile , exportError in
+                if let newAudioFile = audioFile {
+                    if let completion = self.onRecordingEnd {
+                        completion(["data":["recordedUrl": newAudioFile.url.path, "mergedUrl": newAudioFile.url.path, "latencyTime": 0.0]])
+                    }
+                    else {
+                        print("onRecordingEnd nil")
+                    }
+                }
+                else if let error = exportError {
+                    AKLog("Export Failed \(error)")
+                }
+            }
+        }
+    }
+}
+
 
 //MARK: - SRCountdownTimerDelegate
 extension RecordingView: SRCountdownTimerDelegate {
@@ -570,6 +704,26 @@ extension RecordingView {
             captureSession.startRunning()
             print(captureSession.inputs)
 //        }
+    }
+    
+    private func showAlbumPreview() {
+        let width = self.bounds.width
+        let height = self.bounds.height * 0.75
+        let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height
+        self.imvAlbumPreview.frame = CGRect(x: 0, y: yPosition, width: width, height: height)
+        self.imvAlbumPreview.layer.masksToBounds = true
+        if let urlImage = self.albumPreview, let url = URL(string: urlImage) {
+            do {
+                let imageData = try Data(contentsOf: url)
+                self.imvAlbumPreview.image = UIImage(data: imageData)
+            }
+            catch { print(error.localizedDescription) }
+        }
+        else {
+            self.imvAlbumPreview.image = UIImage(named: "Image")
+        }
+        self.imvAlbumPreview.contentMode = .scaleAspectFill
+        self.addSubview(self.imvAlbumPreview)
     }
     
     func addPeriodicTimeObserver() {
