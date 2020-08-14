@@ -153,6 +153,13 @@ class RecordingView: UIView {
             player.pause()
             self.removePlayerObserver()
         }
+        
+        if let beatPlayer = self.beatPlayer, beatPlayer.isPlaying {
+            self.micBooster.gain = 0
+            self.beatPlayer?.stop()
+            self.periodicFunc?.stop()
+            self.recorder.stop()
+        }
     }
     
     @objc func endPlayVideo() {
@@ -221,6 +228,11 @@ class RecordingView: UIView {
         self.txvLyrics.removeFromSuperview()
         self.vwLyrics.removeFromSuperview()
         
+//        self.micBooster.gain = 0
+        self.beatPlayer?.stop()
+        self.periodicFunc?.stop()
+//        self.recorder.stop()
+        
         removePlayerObserver()
     }
 }
@@ -228,7 +240,7 @@ class RecordingView: UIView {
 //MARK: - Setup
 extension RecordingView {
   fileprivate func setupRecordButton() {
-    self.btnRecord.frame = CGRect(x: 0, y: 0, width: RECORD_BUTTON_HEIGHT, height: RECORD_BUTTON_HEIGHT)
+    self.btnRecord.frame = CGRect(x: 12, y: 12, width: RECORD_BUTTON_HEIGHT, height: RECORD_BUTTON_HEIGHT)
     self.btnRecord.backgroundColor = UIColor.clear
     self.btnRecord.setImage(UIImage(named:"ic_play"), for: .normal)
     self.btnRecord.setImage(UIImage(named:"ic_pause"), for: .selected)
@@ -336,15 +348,13 @@ extension RecordingView {
     
     fileprivate func setupCountdownTimer() {
         DispatchQueue.main.async {
-            let viewMask = UIView(frame: self.bounds)
+            let viewMask = UIView(frame: UIScreen.main.bounds)
             viewMask.backgroundColor = UIColor.black.withAlphaComponent(0.75)
             self.addSubview(viewMask)
             
             let width: CGFloat = 100
             let height: CGFloat = 100
-            let xAxis = self.bounds.size.width / 2 - width / 2
-            let yAxis = self.bounds.size.height / 2 - height / 2
-            let frame = CGRect(x: xAxis, y: yAxis, width: width, height: height)
+            let frame = CGRect(x: 0, y: 0, width: width, height: height)
             let countdownTimer = SRCountdownTimer(frame: frame)
             countdownTimer.labelFont = UIFont(name: "HelveticaNeue-Light", size: 50.0)
             countdownTimer.labelTextColor = UIColor.red
@@ -352,8 +362,10 @@ extension RecordingView {
             countdownTimer.lineWidth = 4
             countdownTimer.delegate = self
             viewMask.addSubview(countdownTimer)
+            countdownTimer.center = viewMask.center
             
             countdownTimer.start(beginingValue: 3, interval: 1)
+            UIApplication.shared.keyWindow?.isUserInteractionEnabled = false
         }
     }
 }
@@ -477,6 +489,7 @@ extension RecordingView: SRCountdownTimerDelegate {
             viewMask.removeFromSuperview()
         }
         self.startRecording()
+        UIApplication.shared.keyWindow?.isUserInteractionEnabled = true
     }
 }
 
