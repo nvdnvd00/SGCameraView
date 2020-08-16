@@ -46,7 +46,7 @@ class RecordingView: UIView {
   private var recorder: AKNodeRecorder!
   private var recordPlayer: AKPlayer!
   private var tape: AKAudioFile!
-  private var micBooster: AKBooster!
+  private var mixerBooster: AKBooster!
   private var mainMixer: AKMixer!
   private var periodicFunc: AKPeriodicFunction?
     
@@ -155,7 +155,7 @@ class RecordingView: UIView {
         }
         
         if let beatPlayer = self.beatPlayer, beatPlayer.isPlaying {
-            self.micBooster.gain = 0
+            self.mixerBooster.gain = 0
             self.beatPlayer?.stop()
             self.periodicFunc?.stop()
             self.recorder.stop()
@@ -397,29 +397,30 @@ extension RecordingView {
         if let beat = self.beat, let url = URL(string: beat) {
             let beatFile = try! AKAudioFile(forReading: url)
             self.beatPlayer = AKPlayer(audioFile: beatFile)
+            self.beatPlayer?.volume = 0.8
             self.beatPlayer?.completionHandler = {
                 self.stopRecording()
                 self.btnRecord.isSelected = !self.btnRecord.isSelected
             }
-            let monoToStereo = AKStereoFieldLimiter(mic, amount: 1)
-            micMixer = AKMixer(monoToStereo, self.beatPlayer!)
+            let micBooster = AKBooster(mic, gain: 3)
+            micMixer = AKMixer(micBooster, self.beatPlayer!)
         }
         else {
             print("Cannot load beat")
-            let monoToStereo = AKStereoFieldLimiter(mic, amount: 1)
-            micMixer = AKMixer(monoToStereo)
+            let micBooster = AKBooster(mic, gain: 3)
+            micMixer = AKMixer(micBooster)
         }
         
-        micBooster = AKBooster(micMixer)
+        mixerBooster = AKBooster(micMixer)
         // Will set the level of microphone monitoring
-        micBooster.gain = 0
+        mixerBooster.gain = 0
         recorder = try? AKNodeRecorder(node: micMixer)
         if let file = recorder.audioFile {
 //            file.maxLevel = 6.0
             recordPlayer = AKPlayer(audioFile: file)
         }
 
-        mainMixer = AKMixer(micBooster)
+        mainMixer = AKMixer(mixerBooster)
         
         self.periodicFunc = AKPeriodicFunction(every: 0.25) {
             let time = self.beatPlayer?.currentTime ?? 0.0
@@ -442,9 +443,8 @@ extension RecordingView {
     }
     
     fileprivate func startRecordByAudioKit() {
-        self.mic?.volume = 3
         if AKSettings.headPhonesPlugged {
-            micBooster.gain = 1
+            mixerBooster.gain = 1
         }
         do {
             self.beatPlayer?.play()
@@ -453,7 +453,7 @@ extension RecordingView {
     }
     
     fileprivate func endRecordByAudioKit() {
-        micBooster.gain = 0
+        mixerBooster.gain = 0
         tape = recorder.audioFile!
         recordPlayer.load(audioFile: tape)
 
