@@ -8,6 +8,7 @@
 import UIKit
 import AVKit
 import AudioKit
+import Kingfisher
 
 class RecordingView: UIView {
   let RECORD_BUTTON_HEIGHT: CGFloat = 60
@@ -730,11 +731,27 @@ extension RecordingView {
             self.albumPreview = coverPhoto
         }
         if let urlImage = self.albumPreview, let url = URL(string: urlImage) {
-            do {
-                let imageData = try Data(contentsOf: url)
-                self.imvAlbumPreview.image = UIImage(data: imageData)
+            let processor = DownsamplingImageProcessor(size: self.imvAlbumPreview.bounds.size)
+                |> RoundCornerImageProcessor(cornerRadius: 20)
+            self.imvAlbumPreview.kf.indicatorType = .activity
+            self.imvAlbumPreview.kf.setImage(
+                with: url,
+                placeholder: UIImage(named: "Image"),
+                options: [
+                    .processor(processor),
+                    .scaleFactor(UIScreen.main.scale),
+                    .transition(.fade(1)),
+                    .cacheOriginalImage
+                ])
+            {
+                result in
+                switch result {
+                case .success(let value):
+                    print("Task done for: \(value.source.url?.absoluteString ?? "")")
+                case .failure(let error):
+                    print("Job failed: \(error.localizedDescription)")
+                }
             }
-            catch { print(error.localizedDescription) }
         }
         else {
             self.imvAlbumPreview.image = UIImage(named: "Image")

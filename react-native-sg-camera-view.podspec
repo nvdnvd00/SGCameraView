@@ -25,6 +25,7 @@ Pod::Spec.new do |s|
   s.dependency "React"
   s.dependency 'mobile-ffmpeg-full'
   s.dependency 'AudioKit'
+  s.dependency 'Kingfisher'
   # ...
   # s.dependency "..."
 end
