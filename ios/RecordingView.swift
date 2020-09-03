@@ -22,6 +22,7 @@ class RecordingView: UIView {
   
   @objc var albumPreview: String?
   @objc var beat: String?
+  @objc var beatDetail: Dictionary<String, Any>?
   @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
   @objc var lyricsNormalColor: UIColor = .black
@@ -725,6 +726,9 @@ extension RecordingView {
         let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height
         self.imvAlbumPreview.frame = CGRect(x: 0, y: yPosition, width: width, height: height)
         self.imvAlbumPreview.layer.masksToBounds = true
+        if let detail = self.beatDetail, let coverPhoto = detail["coverPhotoUrl"] as? String {
+            self.albumPreview = coverPhoto
+        }
         if let urlImage = self.albumPreview, let url = URL(string: urlImage) {
             do {
                 let imageData = try Data(contentsOf: url)

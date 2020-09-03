@@ -14,6 +14,7 @@ class RecordingManager: RCTViewManager {
     
   @objc var albumPreview: String?
   @objc var beat: String?
+  @objc var beatDetail: Dictionary<String, Any>?
   @objc var lyric: [Any]?
   @objc var onRecordingEnd: RCTDirectEventBlock?
   @objc var delay: Double = 0.0
@@ -27,6 +28,7 @@ class RecordingManager: RCTViewManager {
       let recordingView = RecordingView()
       recordingView.albumPreview = self.albumPreview
       recordingView.beat = self.beat
+      recordingView.beatDetail = self.beatDetail
       recordingView.lyric = self.lyric
       recordingView.onRecordingEnd = self.onRecordingEnd
       recordingView.delay = self.delay
