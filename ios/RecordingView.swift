@@ -729,7 +729,7 @@ extension RecordingView {
         let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height + (padding - height)/2
         self.imvAlbumPreview.frame = CGRect(x: xPosition, y: yPosition, width: width, height: height)
         self.imvAlbumPreview.layer.masksToBounds = true
-        self.imvAlbumPreview.layer.cornerRadius = 5.0
+        self.imvAlbumPreview.layer.cornerRadius = UIDevice.current.userInterfaceIdiom == .phone ? 5.0 : 20.0
         if let detail = self.beatDetail, let coverPhoto = detail["coverPhotoUrl"] as? String {
             self.albumPreview = coverPhoto
         }
