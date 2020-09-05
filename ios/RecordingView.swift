@@ -722,11 +722,14 @@ extension RecordingView {
     }
     
     private func showAlbumPreview() {
-        let width = self.bounds.width
-        let height = self.bounds.height * 0.75
-        let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height
-        self.imvAlbumPreview.frame = CGRect(x: 0, y: yPosition, width: width, height: height)
+        let padding = self.btnRecord.frame.origin.y - (self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height)
+        let height = padding * 2 / 3
+        let width = height
+        let xPosition = (self.bounds.width - width)/2
+        let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height + (padding - height)/2
+        self.imvAlbumPreview.frame = CGRect(x: xPosition, y: yPosition, width: width, height: height)
         self.imvAlbumPreview.layer.masksToBounds = true
+        self.imvAlbumPreview.layer.cornerRadius = 5.0
         if let detail = self.beatDetail, let coverPhoto = detail["coverPhotoUrl"] as? String {
             self.albumPreview = coverPhoto
         }
