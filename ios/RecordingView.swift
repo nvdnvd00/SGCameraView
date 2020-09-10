@@ -396,6 +396,10 @@ extension RecordingView {
         AKSettings.defaultToSpeaker = true
         self.mic = AKMicrophone()
         // Patching
+        var initMicGain: Double = 1
+        if AKSettings.headPhonesPlugged {
+            initMicGain = 3
+        }
         if let beat = self.beat, let url = URL(string: beat) {
             let beatFile = try! AKAudioFile(forReading: url)
             self.beatPlayer = AKPlayer(audioFile: beatFile)
@@ -404,12 +408,12 @@ extension RecordingView {
                 self.stopRecording()
                 self.btnRecord.isSelected = !self.btnRecord.isSelected
             }
-            let micBooster = AKBooster(mic, gain: 3)
+            let micBooster = AKBooster(mic, gain: initMicGain)
             micMixer = AKMixer(micBooster, self.beatPlayer!)
         }
         else {
             print("Cannot load beat")
-            let micBooster = AKBooster(mic, gain: 3)
+            let micBooster = AKBooster(mic, gain: initMicGain)
             micMixer = AKMixer(micBooster)
         }
         
@@ -445,9 +449,7 @@ extension RecordingView {
     }
     
     fileprivate func startRecordByAudioKit() {
-        if AKSettings.headPhonesPlugged {
-            mixerBooster.gain = 1
-        }
+        mixerBooster.gain = 1
         do {
             self.beatPlayer?.play()
             try recorder.record()
@@ -468,7 +470,7 @@ extension RecordingView {
                                       exportFormat: .m4a) { audioFile , exportError in
                 if let newAudioFile = audioFile {
                     if let completion = self.onRecordingEnd {
-                        completion(["data":["recordedUrl": newAudioFile.url.path, "mergedUrl": newAudioFile.url.path, "latencyTime": 0.0]])
+                        completion(["data":["recordedUrl": newAudioFile.url.path, "mergedUrl": newAudioFile.url.path, "latencyTime": 0.0, "type": "1"]])
                     }
                     else {
                         print("onRecordingEnd nil")
