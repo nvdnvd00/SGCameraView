@@ -770,7 +770,7 @@ extension RecordingView: MovieRecorderDelegate {
                 if let completion = self.onRecordingEnd {
                     //Type = 1: audio
                     //Type = 2: video
-                    completion(["data":["recordedUrl": self.outputVideoURL.path, "mergedUrl": self.outputVideoURL.path, "type": "2"]])
+                    completion(["data":["recordedUrl": self.outputVideoURL.path, "mergedUrl": self.outputVideoURL.path, "type": 2]])
                 }
             }
             
