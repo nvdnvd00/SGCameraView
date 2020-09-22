@@ -7,216 +7,152 @@
 
 import UIKit
 import AVKit
-import AudioKit
 import Kingfisher
 
-class RecordingView: UIView {
-  let RECORD_BUTTON_HEIGHT: CGFloat = 60
-  private var videoFileOutput: AVCaptureMovieFileOutput?
-  private var cameraPreviewLayer: AVCaptureVideoPreviewLayer?
-  private var player: AVPlayer?
-  private var loadingView: UIView?
-  private var btnRecord = UIButton(type: .custom)
-  private var vwLyrics = UIView(frame: .zero)
-  private var txvLyrics = UITextView(frame: .zero)
-  private var imvAlbumPreview = UIImageView(frame: .zero)
-  
-  @objc var albumPreview: String?
-  @objc var beat: String?
-  @objc var beatDetail: Dictionary<String, Any>?
-  @objc var lyric: [Any]?
-  @objc var onRecordingEnd: RCTDirectEventBlock?
-  @objc var lyricsNormalColor: UIColor = .black
-  @objc var lyricsHighlightColor: UIColor = .white
-  @objc var delay: Double = 0.0
-  @objc var adjustVolumeMusicVideoIOS: Double = 0.0
-  @objc var adjustVolumeRecordingVideoIOS: Double = 0.0
-  
-  private var arrLyricsModel: [Lyrics] = []
-  private var timeObserverToken: Any?
-  private var isUserScroll: Bool = false
-  private var isCancelRecording: Bool = false
-  private let TIME_CONTROL_STATUS_KEY = "timeControlStatus"
-  private var isAddObserver: Bool = false
-  private var latencyTime: Double = 0.0
+enum RecordingStatus: Int {
+    case idle, preparing, recording
+}
 
-  private var urlAfterRecorded: URL?
+class RecordingView: UIView {
+    let RECORD_BUTTON_HEIGHT: CGFloat = 60
+    private var cameraPreviewLayer: AVCaptureVideoPreviewLayer?
+    private var loadingView: UIView?
+    private var btnRecord = UIButton(type: .custom)
+    private var vwLyrics = UIView(frame: .zero)
+    private var txvLyrics = UITextView(frame: .zero)
+    private var imvAlbumPreview = UIImageView(frame: .zero)
+    private var videoView: PreviewView?
     
-  private var mic : AKMicrophone?
-  private var beatPlayer: AKPlayer?
-  private var micMixer: AKMixer!
-  private var recorder: AKNodeRecorder!
-  private var recordPlayer: AKPlayer!
-  private var tape: AKAudioFile!
-  private var mixerBooster: AKBooster!
-  private var mainMixer: AKMixer!
-  private var periodicFunc: AKPeriodicFunction?
+    @objc var albumPreview: String?
+    @objc var beat: String?
+    @objc var beatDetail: Dictionary<String, Any>?
+    @objc var lyric: [Any]?
+    @objc var onRecordingEnd: RCTDirectEventBlock?
+    @objc var lyricsNormalColor: UIColor = .black
+    @objc var lyricsHighlightColor: UIColor = .white
+    @objc var delay: Double = 0.0
+    @objc var adjustVolumeMusicVideoIOS: Double = 0.0
+    @objc var adjustVolumeRecordingVideoIOS: Double = 0.0
     
-  override func draw(_ rect: CGRect) {
-      updateLayout()
-  }
+    private var arrLyricsModel: [Lyrics] = []
+    private var timeObserverToken: Any?
+    private var isUserScroll: Bool = false
+    private var isCancelRecording: Bool = false
+    private let TIME_CONTROL_STATUS_KEY = "timeControlStatus"
+    private var isAddObserver: Bool = false
+    private var latencyTime: Double = 0.0
+    
+    //MARK: - New concept
+    // For handle audio
+    private var audioMixer: AudioMixer?
+    
+    // For recording video from device Camera
+    private var captureSession = AVCaptureSession()
+    private var videoCaptureDevice : AVCaptureDevice?
+    private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
+    private var videoOutputQueue: DispatchQueue = DispatchQueue(label: "com.apple.sample.capturepipeline.video")
+    private var videoSettings: [String: Any]?
+    private var videoConnectionOrientation: AVCaptureVideoOrientation?
+    private var videoConnection: AVCaptureConnection?
+    private var videoFormatDescription: CMFormatDescription?
+    private var status: RecordingStatus = .idle
+    private var movieRecorder: MovieRecorder?
+    private var captureOrientation: AVCaptureVideoOrientation = AVCaptureVideoOrientation.portrait
+    let outputVideoURL = RecordingView.getOutputUrl(name: "output.mp4")
+    //MARK: -
+    
+    override func draw(_ rect: CGRect) {
+        updateLayout()
+    }
     override func layoutSubviews() {
         super.layoutSubviews()
         updateLayout()
     }
     
-  override init(frame: CGRect) {
-     super.init(frame: frame)
-     setupView()
-   }
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupView()
+    }
     
     override func reactSetFrame(_ frame: CGRect) {
         super.reactSetFrame(frame)
         self.frame = CGRect(x: 0, y: 0, width: frame.size.width, height: frame.size.height)
         updateLayout()
     }
-  
-   required init?(coder aDecoder: NSCoder) {
-     super.init(coder: aDecoder)
-     setupView()
-   }
-  
-  private func setupView()  {
-    self.autoresizingMask = [.flexibleHeight, .flexibleWidth]
-    setupRecordButton()
-    if let beat = self.beat, let _ = URL(string: beat) {
-        self.setupAudioKitRecorder()
+    
+    required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+        setupView()
     }
     
-//    setupAudioSession()
-    setupLyricsView()
-  }
+    private func setupView()  {
+        self.autoresizingMask = [.flexibleHeight, .flexibleWidth]
+        setupRecordButton()
+        setupLyricsView()
+    }
+    
+    @objc private func deviceOrientationDidChange() {
+        let deviceOrientation = UIDevice.current.orientation
+        if deviceOrientation.isPortrait || deviceOrientation.isLandscape {
+            if let orientation = AVCaptureVideoOrientation(rawValue: deviceOrientation.rawValue) {
+                self.captureOrientation = orientation
+            }
+        }
+    }
     
     fileprivate func updateLayout() {
         if self.btnRecord.isHidden {
             updateRecordButtonPosition()
         }
         if self.loadingView == nil {
-          setupLoadingView()
+            setupLoadingView()
         }
         if self.vwLyrics.frame == .zero {
             self.parseLyrics()
             self.updateLyricsViewPosition()
             self.updateHighlightLyrics(time: 0.0)
         }
-//        if self.cameraPreviewLayer == nil {
-//          self.showCameraPreview()
-//          self.bringSubview(toFront:self.btnRecord)
+//        if self.imvAlbumPreview.frame == .zero {
+//            self.showAlbumPreview()
+//            self.bringSubview(toFront:self.btnRecord)
 //        }
-        if self.imvAlbumPreview.frame == .zero {
-            self.showAlbumPreview()
-            self.bringSubview(toFront:self.btnRecord)
+        if self.videoView == nil {
+            self.videoView = PreviewView(frame: self.frame)
+            self.addSubview(self.videoView!)
+            self.bringSubview(toFront: self.vwLyrics)
+            self.bringSubview(toFront: self.btnRecord)
+            self.requestPermissions()
+            //Register notification
+            NotificationCenter.default.addObserver(self, selector: #selector(deviceOrientationDidChange), name: NSNotification.Name.UIDeviceOrientationDidChange, object: UIDevice.current)
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         }
     }
     
-  fileprivate func updateRecordButtonPosition() {
-    let xPosition: CGFloat = self.frame.size.width/2 - self.RECORD_BUTTON_HEIGHT/2
-    let yPosition: CGFloat = self.frame.size.height - self.RECORD_BUTTON_HEIGHT - 10
-    if self.btnRecord.isHidden {
-      self.btnRecord.isHidden = false
+    fileprivate func updateRecordButtonPosition() {
+        let xPosition: CGFloat = self.frame.size.width/2 - self.RECORD_BUTTON_HEIGHT/2
+        let yPosition: CGFloat = self.frame.size.height - self.RECORD_BUTTON_HEIGHT - 10
+        if self.btnRecord.isHidden {
+            self.btnRecord.isHidden = false
+        }
+        self.btnRecord.frame = CGRect(x: xPosition, y: yPosition, width: self.RECORD_BUTTON_HEIGHT, height: self.RECORD_BUTTON_HEIGHT)
     }
-    self.btnRecord.frame = CGRect(x: xPosition, y: yPosition, width: self.RECORD_BUTTON_HEIGHT, height: self.RECORD_BUTTON_HEIGHT)
-  }
-  
-  func startRecording() {
-    DispatchQueue.main.async {
-        self.loadingView?.isHidden = true
-        self.bringSubview(toFront:self.btnRecord)
-        self.btnRecord.isUserInteractionEnabled = true
-        self.startRecordByAudioKit()
-//      guard let beat = self.beat else {
-//          print(String(describing: Self.self) ,#function, "ERROR: You must set beat url")
-//          return
-//      }
-//      self.playAudio(urlString: beat)
-    }
-  }
-  
-  func stopRecording() {
-    DispatchQueue.main.async {
-        self.endRecordByAudioKit()
-//      if let videoFileOutput = self.videoFileOutput, videoFileOutput.isRecording {
-//        videoFileOutput.stopRecording()
-//      }
-//      if let player = self.player {
-//          player.pause()
-//          self.removePlayerObserver()
-//      }
-    }
-  }
     
     @objc func cancelRecording() {
         print(String(describing: Self.self) ,#function)
         isCancelRecording = true
-        if let output = self.videoFileOutput, output.isRecording {
-            output.stopRecording()
-        }
-        if let player = self.player, player.rate > 0 {
-            player.pause()
-            self.removePlayerObserver()
-        }
-        
-        if let beatPlayer = self.beatPlayer, beatPlayer.isPlaying {
-            self.mixerBooster.gain = 0
-            self.beatPlayer?.stop()
-            self.periodicFunc?.stop()
-            self.recorder.stop()
+        DispatchQueue.main.async {
+            self.stopRecord()
         }
     }
-    
-    @objc func endPlayVideo() {
-        if self.btnRecord.isSelected {
-            print("____endPlayVideo")
-            stopRecording()
-            self.btnRecord.isSelected = false
-        }
-    }
-    
-  fileprivate func realStartRecording() {
-      loadingView?.isHidden = true
-    self.bringSubview(toFront:self.btnRecord)
-    self.btnRecord.isUserInteractionEnabled = true
-      do {
-          let initialOutputURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("output").appendingPathExtension("mov")
-          videoFileOutput?.startRecording(to: initialOutputURL, recordingDelegate: self)
-      } catch {
-          print(error)
-      }
-  }
-  
-  override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-      if let player =  object as? AVPlayer, keyPath == TIME_CONTROL_STATUS_KEY {
-          if player.timeControlStatus == .playing {
-              if let videoFileOutput = self.videoFileOutput, !videoFileOutput.isRecording {
-                  player.pause()
-                  realStartRecording()
-                  return
-              }
-              print(String(describing: Self.self) ,#function, "2.is playing audio: \(Date().timeIntervalSince1970 * 1000)")
-            let latency = Date().timeIntervalSince1970 * 1000
-            self.latencyTime = latency - self.latencyTime
-            print(String(describing: Self.self) ,#function, "REAL_LATENCY: \(self.latencyTime.rounded())")
-          }
-      }
-  }
     
     private func removePlayerObserver() {
         if !self.isAddObserver { return }
-        if let player = self.player {
-            player.removeObserver(self, forKeyPath: TIME_CONTROL_STATUS_KEY)
-        }
-        removePeriodicTimeObserver()
         NotificationCenter.default.removeObserver(self)
         self.isAddObserver = false
     }
     
     deinit {
-        removePeriodicTimeObserver()
-        
         print(String(describing: Self.self) ,#function, "TN_TEST")
-        videoFileOutput = nil
-        
-        player = nil
         
         cameraPreviewLayer?.removeFromSuperlayer()
         cameraPreviewLayer = nil
@@ -230,43 +166,35 @@ class RecordingView: UIView {
         self.txvLyrics.removeFromSuperview()
         self.vwLyrics.removeFromSuperview()
         
-//        self.micBooster.gain = 0
-        self.beatPlayer?.stop()
-        self.periodicFunc?.stop()
-//        self.recorder.stop()
-        
         removePlayerObserver()
     }
 }
 
 //MARK: - Setup
 extension RecordingView {
-  fileprivate func setupRecordButton() {
-    self.btnRecord.frame = CGRect(x: 12, y: 12, width: RECORD_BUTTON_HEIGHT, height: RECORD_BUTTON_HEIGHT)
-    self.btnRecord.backgroundColor = UIColor.clear
-    self.btnRecord.setImage(UIImage(named:"ic_play"), for: .normal)
-    self.btnRecord.setImage(UIImage(named:"ic_pause"), for: .selected)
-    self.btnRecord.layer.masksToBounds = true
-    self.btnRecord.layer.cornerRadius = RECORD_BUTTON_HEIGHT/2
-    self.addSubview(btnRecord)
-    self.btnRecord.addTarget(self, action: #selector(ontapRecodingButton(sender:)), for: .touchUpInside)
-    self.btnRecord.isHidden = true
-  }
-  
-  @objc func ontapRecodingButton(sender: UIButton) {
-    if sender.isSelected {
-      stopRecording()
+    fileprivate func setupRecordButton() {
+        self.btnRecord.frame = CGRect(x: 12, y: 12, width: RECORD_BUTTON_HEIGHT, height: RECORD_BUTTON_HEIGHT)
+        self.btnRecord.backgroundColor = UIColor.clear
+        self.btnRecord.setImage(UIImage(named:"ic_play"), for: .normal)
+        self.btnRecord.setImage(UIImage(named:"ic_pause"), for: .selected)
+        self.btnRecord.layer.masksToBounds = true
+        self.btnRecord.layer.cornerRadius = RECORD_BUTTON_HEIGHT/2
+        self.addSubview(btnRecord)
+        self.btnRecord.addTarget(self, action: #selector(ontapRecodingButton(sender:)), for: .touchUpInside)
+        self.btnRecord.isHidden = true
     }
-    else {
-        if let beat = self.beat, let _ = URL(string: beat) {
-            self.setupAudioKitRecorder()
+    
+    @objc func ontapRecodingButton(sender: UIButton) {
+        if sender.isSelected {
+            stopRecord()
         }
-        setupCountdownTimer()
-        sender.isUserInteractionEnabled = false
+        else {
+            setupCountdownTimer()
+            sender.isUserInteractionEnabled = false
+        }
+        sender.isSelected = !sender.isSelected
     }
-    sender.isSelected = !sender.isSelected
-  }
-  
+    
     fileprivate func setupLoadingView() {
         self.loadingView = UIView(frame: CGRect(x: 0, y: 0, width: self.bounds.size.width, height: self.bounds.size.height))
         self.loadingView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
@@ -278,22 +206,6 @@ extension RecordingView {
         indicator.startAnimating()
         
         self.loadingView?.isHidden = true
-    }
-    
-    fileprivate func setupAudioSession() {
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(AVAudioSessionCategoryPlayAndRecord, mode: AVAudioSessionModeVideoRecording, options: AVAudioSession.CategoryOptions.mixWithOthers)
-        } catch {
-            print(String(describing: Self.self) ,#function, "Can't Set Audio Session Category: \(error)")
-        }
-        
-        // Start Session
-        do {
-            try audioSession.setActive(true)
-        } catch {
-            print(String(describing: Self.self) ,#function, "Can't Start Audio Session: \(error)")
-        }
     }
     
     fileprivate func setupLyricsView() {
@@ -371,119 +283,6 @@ extension RecordingView {
         }
     }
 }
-//MARK: - AudioKit
-extension RecordingView {
-    private func setupAudioKitRecorder() {
-        do{
-            try AudioKit.stop()
-        }
-        catch{
-            print ("AudioKit stop error")
-        }
-        
-        // Clean tempFiles !
-        AKAudioFile.cleanTempDirectory()
-
-        // Session settings
-        AKSettings.bufferLength = .medium
-
-        do {
-            try AKSettings.setSession(category: .playAndRecord, with: .allowBluetoothA2DP)
-        } catch {
-            AKLog("Could not set session category.")
-        }
-
-        AKSettings.defaultToSpeaker = true
-        self.mic = AKMicrophone()
-        // Patching
-        var initMicGain: Double = 1
-        if AKSettings.headPhonesPlugged {
-            initMicGain = 3
-        }
-        if let beat = self.beat, let url = URL(string: beat) {
-            let beatFile = try! AKAudioFile(forReading: url)
-            self.beatPlayer = AKPlayer(audioFile: beatFile)
-            self.beatPlayer?.volume = 0.8
-            self.beatPlayer?.completionHandler = {
-                self.stopRecording()
-                self.btnRecord.isSelected = !self.btnRecord.isSelected
-            }
-            let micBooster = AKBooster(mic, gain: initMicGain)
-            micMixer = AKMixer(micBooster, self.beatPlayer!)
-        }
-        else {
-            print("Cannot load beat")
-            let micBooster = AKBooster(mic, gain: initMicGain)
-            micMixer = AKMixer(micBooster)
-        }
-        
-        mixerBooster = AKBooster(micMixer)
-        // Will set the level of microphone monitoring
-        mixerBooster.gain = 0
-        recorder = try? AKNodeRecorder(node: micMixer)
-        if let file = recorder.audioFile {
-//            file.maxLevel = 6.0
-            recordPlayer = AKPlayer(audioFile: file)
-        }
-
-        mainMixer = AKMixer(mixerBooster)
-        
-        self.periodicFunc = AKPeriodicFunction(every: 0.25) {
-            let time = self.beatPlayer?.currentTime ?? 0.0
-            print("Beat time: \(time)")
-            self.updateHighlightLyrics(time: time)
-        }
-        
-        AudioKit.output = mainMixer
-        do {
-            self.periodicFunc?.start()
-            if let periodic = self.periodicFunc {
-                try AudioKit.start(withPeriodicFunctions: periodic)
-            }
-            else {
-                try AudioKit.start()
-            }
-        } catch {
-            AKLog("AudioKit did not start!")
-        }
-    }
-    
-    fileprivate func startRecordByAudioKit() {
-        mixerBooster.gain = 1
-        do {
-            self.beatPlayer?.play()
-            try recorder.record()
-        } catch { AKLog("Errored recording.") }
-    }
-    
-    fileprivate func endRecordByAudioKit() {
-        mixerBooster.gain = 0
-        tape = recorder.audioFile!
-        recordPlayer.load(audioFile: tape)
-
-        if let _ = recordPlayer.audioFile?.duration {
-            self.periodicFunc?.stop()
-            self.beatPlayer?.stop()
-            recorder.stop()
-            tape.exportAsynchronously(name: "TempTestFile.m4a",
-                                      baseDir: .documents,
-                                      exportFormat: .m4a) { audioFile , exportError in
-                if let newAudioFile = audioFile {
-                    if let completion = self.onRecordingEnd {
-                        completion(["data":["recordedUrl": newAudioFile.url.path, "mergedUrl": newAudioFile.url.path, "latencyTime": 0.0, "type": "1"]])
-                    }
-                    else {
-                        print("onRecordingEnd nil")
-                    }
-                }
-                else if let error = exportError {
-                    AKLog("Export Failed \(error)")
-                }
-            }
-        }
-    }
-}
-
 
 //MARK: - SRCountdownTimerDelegate
 extension RecordingView: SRCountdownTimerDelegate {
@@ -492,7 +291,7 @@ extension RecordingView: SRCountdownTimerDelegate {
             sender.removeFromSuperview()
             viewMask.removeFromSuperview()
         }
-        self.startRecording()
+        self.startRecord()
         UIApplication.shared.keyWindow?.isUserInteractionEnabled = true
     }
 }
@@ -528,25 +327,10 @@ extension RecordingView {
         var finalString = highlightLyricsString + normalLyricsString
         finalString = finalString.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        //Scroll
-        /*
-        if self.isUserScroll == false && finalString.count > 0 {
-            let percentHilightText: Double = Double(highlightLyricsString.count) / Double(finalString.count)
-            let highlightPosition = CGFloat(percentHilightText) * self.txvLyrics.contentSize.height
-            var yPosition = (highlightPosition - (self.txvLyrics.frame.size.height/2)) > 0 ? (highlightPosition - (self.txvLyrics.frame.size.height/2)) : 0
-            let height = self.txvLyrics.frame.size.height
-            if (yPosition + height) >= self.txvLyrics.contentSize.height {
-                yPosition = self.txvLyrics.contentSize.height - height
-            }
-            let visibleFrame = CGRect(x: 0, y: yPosition, width: self.txvLyrics.frame.size.width, height: height)
-            self.txvLyrics.scrollRectToVisible(visibleFrame, animated: true)
-        }
-         */
         if self.isUserScroll == false && finalString.count > 0 {
             if let endPos = txvLyrics.position(from: txvLyrics.beginningOfDocument, offset: highlightLyricsString.count), let textRange = txvLyrics.textRange(from: txvLyrics.beginningOfDocument, to: endPos) {
                 let lyricsHeight = self.txvLyrics.frame.size.height
                 
-//                let rect = txvLyrics.firstRect(for: textRange)
                 let rect = txvLyrics.caretRect(for: textRange.end)
                 if rect.origin.y > lyricsHeight / 2 {
                     var yPosition = rect.origin.y - lyricsHeight / 2
@@ -640,89 +424,9 @@ extension RecordingView {
         return resultString
     }
 }
+
 //MARK: - Record
 extension RecordingView {
-    fileprivate func playAudio(urlString: String) {
-        let videoURL = URL(string: urlString)
-        let playerItem: AVPlayerItem = AVPlayerItem(url: videoURL!)
-        let newPlayer = AVPlayer(playerItem: playerItem)
-        self.player = newPlayer
-        self.player?.play()
-        let playerLayer = AVPlayerLayer(player: self.player)
-        if let window = UIApplication.shared.keyWindow {
-            playerLayer.frame = window.bounds
-            window.layer.addSublayer(playerLayer)
-        }
-        else {
-            print(String(describing: Self.self) ,#function, "ERROR: Cannot load WINDOW view")
-        }
-        self.player?.addObserver(self, forKeyPath: TIME_CONTROL_STATUS_KEY, options: [.old, .new], context: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(endPlayVideo), name: .AVPlayerItemDidPlayToEndTime, object: nil)
-        self.addPeriodicTimeObserver()
-        self.isAddObserver = true
-    }
-    
-    fileprivate func showCameraPreview() {
-//        DispatchQueue.main.async {
-            let captureSession = AVCaptureSession()
-            
-            // Preset For 720p
-            captureSession.sessionPreset = AVCaptureSession.Preset.hd1280x720
-            
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .front) else {
-            print(String(describing: Self.self) ,#function, "Current Device does not support camera!")
-            return
-        }
-            // Video Input
-            let videoInput: AVCaptureDeviceInput
-            do {
-                videoInput = try AVCaptureDeviceInput(device: camera)
-                
-                // Add Video Input
-                if captureSession.canAddInput(videoInput) {
-                    captureSession.addInput(videoInput)
-                } else {
-                    print(String(describing: Self.self) ,#function, "ERROR: Can't add video input")
-                }
-            }
-            catch let error {
-                print(String(describing: Self.self) ,#function, "ERROR: Getting input device: \(error)")
-            }
-            
-            // Audio Input
-            guard let audioInputDevice = AVCaptureDevice.default(for: AVMediaType.audio) else { return }
-            do {
-                let audioInput = try AVCaptureDeviceInput(device: audioInputDevice)
-                
-                // Add Audio Input
-                if captureSession.canAddInput(audioInput) {
-                    captureSession.addInput(audioInput)
-                } else {
-                    print(String(describing: Self.self) ,#function, "Can't Add Audio Input")
-                }
-            } catch let error {
-                print(String(describing: Self.self) ,#function, "Error Getting Input Device: \(error)")
-            }
-            
-            // Video Output
-            self.videoFileOutput = AVCaptureMovieFileOutput()
-            captureSession.addOutput(self.videoFileOutput!)
-            
-            // Show Camera Preview
-            self.cameraPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-            self.layer.addSublayer(self.cameraPreviewLayer!)
-            self.cameraPreviewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill
-            let width = self.bounds.width
-            let height = self.bounds.height * 0.75
-            let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height
-            self.cameraPreviewLayer?.frame = CGRect(x: 0, y: yPosition, width: width, height: height)
-            
-            // Bring Record Button To Front & Start Session
-            captureSession.startRunning()
-            print(captureSession.inputs)
-//        }
-    }
-    
     private func showAlbumPreview() {
         let padding = self.btnRecord.frame.origin.y - (self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height)
         let height = padding * 2 / 3
@@ -765,194 +469,16 @@ extension RecordingView {
         self.addSubview(self.imvAlbumPreview)
     }
     
-    func addPeriodicTimeObserver() {
-        if let player = self.player {
-            let timeScale = CMTimeScale(NSEC_PER_SEC)
-            let time = CMTime(seconds: 0.25, preferredTimescale: timeScale)
-
-            timeObserverToken = player.addPeriodicTimeObserver(forInterval: time, queue: .main) { time in
-                self.updateHighlightLyrics(time: CMTimeGetSeconds(time))
-            }
-        }
-    }
-
-    func removePeriodicTimeObserver() {
-        if let player = self.player, let timeObserverToken = timeObserverToken {
-            player.removeTimeObserver(timeObserverToken)
-            self.timeObserverToken = nil
-        }
-    }
-}
-
-//MARK: - AVCaptureFileOutputRecordingDelegate
-extension RecordingView: AVCaptureFileOutputRecordingDelegate {
-    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        self.latencyTime = Date().timeIntervalSince1970 * 1000
-        print(String(describing: Self.self) ,#function, "1.didStartRecordingTo: \(self.latencyTime)")
-        if let player = self.player {
-            player.seek(to: CMTime(seconds: 0.0, preferredTimescale: CMTimeScale(1.0)))
-            player.playImmediately(atRate: 1.0)
-        }
-    }
-    
-    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
-        if let error = error {
-            print(String(describing: Self.self) ,#function, "ERROR: didFinishRecordingTo: \(error.localizedDescription)")
-        }
-        else {
-            if self.isCancelRecording {
-                self.isCancelRecording = false
-                return
-            }
-            print(String(describing: Self.self) ,#function, "outputFileURL: \(outputFileURL)")
-            self.encodeVideo(at: outputFileURL) { (videoUrl, mergedUrl, error) in
-                if let error = error {
-                    print(String(describing: Self.self) ,#function, "ERROR: Conver MOV to MP4: \(error.localizedDescription)")
-                    return
-                }
-                if let videoUrl = videoUrl, let mergedUrl = mergedUrl {
-                    print(String(describing: Self.self) ,#function, "MOV to MP4: \(mergedUrl.path)")
-                    if let completion = self.onRecordingEnd {
-                        completion(["data":["recordedUrl": videoUrl.path, "mergedUrl": mergedUrl.path, "latencyTime": self.latencyTime.rounded()]])
-                    }
-                }
-            }
-            
-//            if (UIVideoAtPathIsCompatibleWithSavedPhotosAlbum(outputFileURL.path)) {
-//                UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.path, self, #selector(RecordingView.video(videoPath:didFinishSavingWithError:contextInfo:)), nil)
+//    func addPeriodicTimeObserver() {
+//        if let player = self.player {
+//            let timeScale = CMTimeScale(NSEC_PER_SEC)
+//            let time = CMTime(seconds: 0.25, preferredTimescale: timeScale)
+//
+//            timeObserverToken = player.addPeriodicTimeObserver(forInterval: time, queue: .main) { time in
+//                self.updateHighlightLyrics(time: CMTimeGetSeconds(time))
 //            }
-//            UISaveVideoAtPathToSavedPhotosAlbum(outputFileURL.absoluteString, self, nil, nil)
-        }
-    }
-}
-
-//MARK: - Handle video/audio
-extension RecordingView {
-    @objc func video(videoPath: NSString, didFinishSavingWithError error: NSError?, contextInfo info: AnyObject) {
-        if let _ = error {
-            print(String(describing: Self.self) ,#function, "Error,Video failed to save")
-        } else {
-            print(String(describing: Self.self) ,#function, "Successfully,Video was saved")
-            guard let window = UIApplication.shared.keyWindow else {
-                print(String(describing: Self.self) ,#function, "ERROR: Cannot load WINDOW view")
-                return
-            }
-            let alertController = UIAlertController(title: "Saved video success", message: "Your video was saved to Photos", preferredStyle: .alert)
-            let defaultAction = UIAlertAction(title: "OK", style: .default, handler: nil)
-            alertController.addAction(defaultAction)
-            window.rootViewController?.present(alertController, animated: true, completion: nil)
-        }
-    }
-    
-    func encodeVideo(at videoURL: URL, completionHandler: ((URL?, URL?, Error?) -> Void)?)  {
-        self.setHiddenLoadingView(status: false)
-        
-        let avAsset = AVURLAsset(url: videoURL, options: nil)
-            
-        let startDate = Date()
-            
-        //Create Export session
-        guard let exportSession = AVAssetExportSession(asset: avAsset, presetName: AVAssetExportPresetPassthrough) else {
-            completionHandler?(nil, nil, nil)
-            return
-        }
-            
-        //Creating temp path to save the converted video
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
-        let filePath = documentsDirectory.appendingPathComponent("rendered-Video.mp4")
-            
-        //Check if the file already exists then remove the previous file
-        if FileManager.default.fileExists(atPath: filePath.path) {
-            do {
-                try FileManager.default.removeItem(at: filePath)
-            } catch {
-                completionHandler?(nil, nil, error)
-            }
-        }
-        self.urlAfterRecorded = filePath
-        exportSession.outputURL = filePath
-        exportSession.outputFileType = AVFileType.mp4
-        exportSession.shouldOptimizeForNetworkUse = true
-        let start = CMTimeMakeWithSeconds(0.0, 0)
-        let range = CMTimeRangeMake(start, avAsset.duration)
-        exportSession.timeRange = range
-            
-        exportSession.exportAsynchronously(completionHandler: {() -> Void in
-            switch exportSession.status {
-            case .failed:
-                print(exportSession.error ?? "NO ERROR")
-                completionHandler?(nil, nil, exportSession.error)
-                self.setHiddenLoadingView(status: true)
-            case .cancelled:
-                print("Export canceled")
-                completionHandler?(nil, nil, nil)
-                self.setHiddenLoadingView(status: true)
-            case .completed:
-                //Video conversion finished
-                let endDate = Date()
-                    
-                let time = endDate.timeIntervalSince(startDate)
-                print(time)
-                print("Successful!")
-                print(exportSession.outputURL ?? "NO OUTPUT URL")
-                if let videoUrl = exportSession.outputURL, let beat = self.beat {
-                    let delayAdjusment = self.delay + self.latencyTime.rounded()
-                    RecordingView.mergeVideoAndAudio(inputVideo: videoUrl.path, beat: beat, adjustVolumeRecordingVideoIOS: self.adjustVolumeRecordingVideoIOS, adjustVolumeMusicVideoIOS: self.adjustVolumeMusicVideoIOS, delay: delayAdjusment) { (mergedUrl, error) in
-                        self.setHiddenLoadingView(status: true)
-                        completionHandler?(videoUrl, mergedUrl, error)
-                    }
-                }
-                
-                default: break
-            }
-        })
-    }
-    
-    /// Merge video and audio using MobileFFmpeg lib
-    static func mergeVideoAndAudio(inputVideo: String, mergeredPath: String? = "", beat: String, adjustVolumeRecordingVideoIOS: Double, adjustVolumeMusicVideoIOS: Double, delay: Double, completionHandler: ( (URL?, Error?) -> Void)?) {
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] as URL
-        let outputAudioChain = documentsDirectory.appendingPathComponent("audioChain.mp4")
-        if FileManager.default.fileExists(atPath: outputAudioChain.path) {
-            do {
-                try FileManager.default.removeItem(at: outputAudioChain)
-            } catch { }
-        }
-        
-        var outputMerge = documentsDirectory.appendingPathComponent("mergeVideo.mp4")
-        if let mergeredPath = mergeredPath, let mergeredUrl = URL(string: mergeredPath) {
-            outputMerge = mergeredUrl
-        }
-        
-        if FileManager.default.fileExists(atPath: outputMerge.path) {
-            do {
-                try FileManager.default.removeItem(at: outputMerge)
-            } catch { }
-        }
-        let threshold = pow(10.0, -15/20.0)
-        let returnCodeAudioChain = MobileFFmpeg.execute("-y -i \(inputVideo) -af acompressor=level_in=2:threshold=\(threshold):attack=10:release=80:detection=0,highpass=f=180,highshelf=g=1.26:f=7000,aecho=1.0:0.7:20:0.5 \(outputAudioChain.path)")
-        
-        if returnCodeAudioChain == RETURN_CODE_SUCCESS {
-            let returnCodeMerge = MobileFFmpeg.execute("-y -i \(outputAudioChain.path) -i \(beat) -filter_complex [0:a]volume=\(adjustVolumeRecordingVideoIOS)dB[a0];[1:a]volume=\(adjustVolumeMusicVideoIOS)dB[b0];[b0]adelay=\(abs(delay))|\(abs(delay))[b1];[a0][b1]amerge=inputs=2 -b:a 320k -ac 2 -c:v copy -preset ultrafast -movflags +faststart \(outputMerge.path)")
-            if returnCodeMerge == RETURN_CODE_SUCCESS {
-                print(String(describing: Self.self) ,#function, "MERGE VIDEO SUCCESS")
-                completionHandler?(outputMerge, nil)
-                return
-            }
-            else if returnCodeMerge == RETURN_CODE_CANCEL {
-                print(String(describing: Self.self) ,#function, "Command execution cancelled by user.")
-            }
-            else {
-                print("Command execution failed with rc=\(returnCodeMerge) and output=\(String(describing: MobileFFmpegConfig.getLastCommandOutput()))")
-            }
-        }
-        else if returnCodeAudioChain == RETURN_CODE_CANCEL {
-            print(String(describing: Self.self) ,#function, "Command execution cancelled by user.")
-        }
-        else {
-            print("Command execution failed with rc=\(returnCodeAudioChain) and output=\(String(describing: MobileFFmpegConfig.getLastCommandOutput()))")
-        }
-        completionHandler?(nil, nil)
-    }
+//        }
+//    }
 }
 
 struct Lyrics : Codable {
@@ -994,5 +520,260 @@ extension RecordingView: UITextViewDelegate {
     
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
         self.isUserScroll = false
+    }
+}
+
+//MARK: - New Concept - SETUP
+extension RecordingView {
+    fileprivate func requestPermissions() {
+        requestVideoPermissions()
+        requestAudioPermissions()
+    }
+    
+    fileprivate func requestVideoPermissions() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: // The user has previously granted access to the camera.
+            DispatchQueue.main.async {
+                self.setupCaptureSession()
+            }
+            
+        case .notDetermined: // The user has not yet been asked for camera access.
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                if granted {
+                    DispatchQueue.main.async {
+                        self.setupCaptureSession()
+                    }
+                } else {
+                    self.showErrorPermission()
+                }
+            }
+            
+        case .denied: // The user has previously denied access.
+            showErrorPermission()
+            return
+            
+        case .restricted: // The user can't grant access due to restrictions.
+            showErrorPermission()
+            return
+        @unknown default:
+            showErrorPermission()
+        }
+    }
+    
+    fileprivate func requestAudioPermissions() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            print("Authorized access Microphone")
+        case .notDetermined: // The user has not yet been asked for camera access.
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                if granted {
+                    print("Authorized access Microphone")
+                } else {
+                    self.showErrorPermission()
+                }
+            }
+            
+        case .denied: // The user has previously denied access.
+            showErrorPermission()
+            return
+            
+        case .restricted: // The user can't grant access due to restrictions.
+            showErrorPermission()
+            return
+            
+        @unknown default:
+            showErrorPermission()
+        }
+    }
+    
+    fileprivate func showErrorPermission() {
+        let alert = UIAlertController(title: "Error", message: "Please allow the app to access Camera and Microphone", preferredStyle: .alert)
+        UIApplication.shared.keyWindow?.rootViewController?.presentedViewController?.present(alert, animated: true)
+    }
+    
+    fileprivate func setupCaptureSession() {
+        guard let beat = self.beat, let bgMusic = URL(string: beat) else {
+            print("Cannot load beat")
+            return
+        }
+        audioMixer = AudioMixer(bgMusic: bgMusic)
+        // Do any additional setup after loading the view.
+        if #available(iOS 10.2, *) {
+            videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera],
+                                                                           mediaType: .video, position: .unspecified)
+        }
+        else {
+            videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera],
+                                                                           mediaType: .video, position: .unspecified)
+        }
+        if let device = videoDeviceDiscoverySession?.devices.first(where: { $0.position == .front }) {
+            do {
+                try self.captureSession.addInput(AVCaptureDeviceInput(device: device))
+                self.videoCaptureDevice = device
+            } catch {
+                print("cannot add input")
+            }
+        }
+        let dataOutput = AVCaptureVideoDataOutput()
+        
+        dataOutput.setSampleBufferDelegate(self, queue: videoOutputQueue)
+        
+        self.captureSession.addOutput(dataOutput)
+        
+        videoSettings = dataOutput.recommendedVideoSettingsForAssetWriter(writingTo: .mp4)
+        videoConnection = dataOutput.connection(with: .video)
+        videoConnectionOrientation = videoConnection?.videoOrientation
+        self.videoView?.session = self.captureSession
+        self.videoView?.videoPreviewLayer.videoGravity = .resizeAspectFill
+        self.captureSession.startRunning()
+    }
+    
+    fileprivate func transformCaptureVideoOrientation(_ orientation: AVCaptureVideoOrientation, mirroring:Bool = false) -> CGAffineTransform {
+        var transform = CGAffineTransform.identity
+        
+        // Calculate offsets from an arbitrary reference orientation (portrait)
+        let orientationAngleOffset = angleOffsetFromPortraitOrientationToOrientation(orientation)
+        let videoOrientationAngleOffset = angleOffsetFromPortraitOrientationToOrientation(videoConnectionOrientation ?? AVCaptureVideoOrientation.portrait)
+        
+        // Find the difference in angle between the desired orientation and the video orientation
+        let angleOffset = orientationAngleOffset - videoOrientationAngleOffset
+        transform = CGAffineTransform(rotationAngle: CGFloat(angleOffset))
+        
+        if (self.videoCaptureDevice?.position == .front) {
+            if (mirroring) {
+                transform = transform.scaledBy( x: -1, y: 1 );
+            } else {
+                if orientation == .portrait || orientation == .portraitUpsideDown {
+                    transform = transform.rotated( by: CGFloat(Double.pi) );
+                }
+            }
+        }
+        
+        return transform
+    }
+    
+    func angleOffsetFromPortraitOrientationToOrientation(_ orientation: AVCaptureVideoOrientation) -> Double {
+        var angle: Double = 0.0;
+        switch(orientation) {
+        case .portrait:
+            angle = 0.0
+        case .portraitUpsideDown:
+            angle = .pi
+        case .landscapeRight:
+            angle = -.pi/2.0
+        case .landscapeLeft:
+            angle = .pi/2.0
+        default:
+            break;
+        }
+        return angle;
+    }
+    
+    static func getOutputUrl(name: String) -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        let fileUrl = paths[0].appendingPathComponent(name)
+        return fileUrl
+    }
+}
+
+//MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+extension RecordingView: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        print("drop sampleBuffer")
+    }
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer)
+        if videoFormatDescription == nil {
+            videoFormatDescription = formatDescription
+        }
+        
+        if status == .recording {
+            movieRecorder?.appendVideo(sampleBuffer: sampleBuffer)
+        }
+    }
+}
+
+//MARK: - New Concept - ACTION
+extension RecordingView {
+    fileprivate func startRecord() {
+        let callbackQueue = DispatchQueue(label: "com.apple.sample.capturepipeline.recordercallback")
+        audioMixer?.delegate = self
+        audioMixer?.prepare()
+        movieRecorder = MovieRecorder(outputUrl: outputVideoURL, delegate: self, callbackQueue: callbackQueue)
+        
+        if let videoFormatDescription = self.videoFormatDescription, let videoSettings = self.videoSettings {
+            let transform = self.transformCaptureVideoOrientation(self.captureOrientation)
+            movieRecorder?.addVideoTrack(formatDescription: videoFormatDescription, transform: transform, settings: videoSettings)
+        }
+        
+        if let audioFormat = audioMixer?.audioFormatDescrition, let audioSettings = audioMixer?.audioSettings {
+            movieRecorder?.addAudioTrack(formatDescription: audioFormat, settings: audioSettings)
+        }
+        
+        movieRecorder?.prepareToRecord()
+        status = .preparing
+        btnRecord.isSelected = true
+        btnRecord.isUserInteractionEnabled = true
+    }
+    
+    fileprivate func stopRecord() {
+        if status == .preparing {
+            return
+        }
+        if status == .recording {
+            btnRecord.isSelected = false
+            movieRecorder?.finishRecording()
+            audioMixer?.stop()
+            status = .idle
+        }
+    }
+}
+
+//MARK: - New Concept - AudioMixerDelegate
+extension RecordingView: AudioMixerDelegate {
+    func audioMixerMusicDidFinish(_ mixer: AudioMixer) {
+        self.stopRecord()
+    }
+    
+    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer, currentTime: Double) {
+        DispatchQueue.main.async {
+            self.updateHighlightLyrics(time: currentTime)
+        }
+        if status == .recording {
+            movieRecorder?.appendAudio(sampleBuffer: sampleBuffer)
+        }
+    }
+}
+
+//MARK: - New Concept - MovieRecorderDelegate
+extension RecordingView: MovieRecorderDelegate {
+    func movieRecorderDidFinishPreparing(recorder: MovieRecorder) {
+        print("movieRecorderDidFinishPreparing")
+        status = .recording
+        audioMixer?.start()
+    }
+    
+    func movieRecorder(recorder: MovieRecorder, didFailWithError error: Error?) {
+        print("movieRecorder didFailWithError \(String(describing: error))")
+        status = .idle
+    }
+    
+    func movieRecorderDidFinishRecording(recorder: MovieRecorder) {
+        print("movieRecorderDidFinishRecording")
+        status = .idle
+//        UISaveVideoAtPathToSavedPhotosAlbum(outputVideoURL.path, nil, nil, nil)
+        DispatchQueue.main.async {
+            if self.isCancelRecording {
+                //Do nothing
+            }
+            else {
+                if let completion = self.onRecordingEnd {
+                    //Type = 1: audio
+                    //Type = 2: video
+                    completion(["data":["recordedUrl": self.outputVideoURL.path, "mergedUrl": self.outputVideoURL.path, "type": "2"]])
+                }
+            }
+            
+        }
     }
 }

@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import AudioKit
 
 @objc(RecordingManager)
 class RecordingManager: RCTViewManager {
@@ -24,7 +23,6 @@ class RecordingManager: RCTViewManager {
   private var recordingView: RecordingView?
   
     override func view() -> UIView! {
-        AudioKit.engine.reset()
       let recordingView = RecordingView()
       recordingView.albumPreview = self.albumPreview
       recordingView.beat = self.beat
