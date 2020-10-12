@@ -33,7 +33,7 @@ class AudioMixer {
         audioEngine = AVAudioEngine()
         
         // Activate audio session
-        try! AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayAndRecord, with:[.mixWithOthers, .allowBluetoothA2DP, .defaultToSpeaker])
+        try! AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playAndRecord, options:[.mixWithOthers, .allowBluetoothA2DP, .defaultToSpeaker])
         try! AVAudioSession.sharedInstance().setActive(true)
         self.setInputGain(gain: 1.0)
         
@@ -117,7 +117,7 @@ class AudioMixer {
         self.audioEngine.stop()
         self.audioMixer.removeTap(onBus: 0)
         
-        try? AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback)
+        try? AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playback)
         try? AVAudioSession.sharedInstance().setActive(true)
         isRuninng = false
     }
@@ -127,7 +127,7 @@ class AudioMixer {
         let mixerOutputFormat = mainMixer.outputFormat(forBus: 0)
         
         var mAudioFormatDescription: CMFormatDescription? = nil
-        CMAudioFormatDescriptionCreate(kCFAllocatorDefault, mixerOutputFormat.streamDescription, 0, nil, 0, nil, nil, &mAudioFormatDescription)
+        CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: mixerOutputFormat.streamDescription, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &mAudioFormatDescription)
         return mAudioFormatDescription
     }
     
@@ -167,20 +167,20 @@ extension AVAudioPCMBuffer {
         var sampleBuffer: CMSampleBuffer? = nil
         var format: CMAudioFormatDescription? = nil
         let asbd = self.format.streamDescription
-        var error = CMAudioFormatDescriptionCreate(kCFAllocatorDefault, asbd, 0, nil, 0, nil, nil, &format)
+        var error = CMAudioFormatDescriptionCreate(allocator: kCFAllocatorDefault, asbd: asbd, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format)
         if error != noErr {
             return nil
         }
-        let PTS = CMTimeMake(Int64(AVAudioTime.seconds(forHostTime: ATS.hostTime) * ATS.sampleRate), Int32(ATS.sampleRate))
+        let PTS = CMTimeMake(value: Int64(AVAudioTime.seconds(forHostTime: ATS.hostTime) * ATS.sampleRate), timescale: Int32(ATS.sampleRate))
         
         let bufferListPointer = UnsafeMutableAudioBufferListPointer(self.mutableAudioBufferList)
         let count = CMItemCount(bufferListPointer[1].mDataByteSize / asbd.pointee.mBytesPerFrame)
-        error = CMAudioSampleBufferCreateWithPacketDescriptions(kCFAllocatorDefault, nil, false, nil, nil, format!, count, PTS, nil, &sampleBuffer)
+        error = CMAudioSampleBufferCreateWithPacketDescriptions(allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false, makeDataReadyCallback: nil, refcon: nil, formatDescription: format!, sampleCount: count, presentationTimeStamp: PTS, packetDescriptions: nil, sampleBufferOut: &sampleBuffer)
         if error != noErr {
             return nil
         }
         
-        error = CMSampleBufferSetDataBufferFromAudioBufferList(sampleBuffer!, kCFAllocatorDefault, kCFAllocatorDefault, kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment, self.audioBufferList)
+        error = CMSampleBufferSetDataBufferFromAudioBufferList(sampleBuffer!, blockBufferAllocator: kCFAllocatorDefault, blockBufferMemoryAllocator: kCFAllocatorDefault, flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment, bufferList: self.audioBufferList)
         
         if error != noErr {
             return nil

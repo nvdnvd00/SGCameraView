@@ -105,7 +105,7 @@ class RecordingView: UIView {
 //        }
         if self.imvAlbumPreview.frame == .zero {
             self.showAlbumPreview()
-            self.bringSubview(toFront:self.btnRecord)
+            self.bringSubviewToFront(self.btnRecord)
         }
     }
     
@@ -121,7 +121,7 @@ class RecordingView: UIView {
   func startRecording() {
     DispatchQueue.main.async {
         self.loadingView?.isHidden = true
-        self.bringSubview(toFront:self.btnRecord)
+        self.bringSubviewToFront(self.btnRecord)
         self.btnRecord.isUserInteractionEnabled = true
         self.startRecordByAudioKit()
 //      guard let beat = self.beat else {
@@ -174,7 +174,7 @@ class RecordingView: UIView {
     
   fileprivate func realStartRecording() {
       loadingView?.isHidden = true
-    self.bringSubview(toFront:self.btnRecord)
+    self.bringSubviewToFront(self.btnRecord)
     self.btnRecord.isUserInteractionEnabled = true
       do {
           let initialOutputURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("output").appendingPathExtension("mov")
@@ -272,7 +272,7 @@ extension RecordingView {
         self.loadingView?.backgroundColor = UIColor.black.withAlphaComponent(0.75)
         self.addSubview(self.loadingView!)
         
-        let indicator = UIActivityIndicatorView.init(activityIndicatorStyle: .whiteLarge)
+        let indicator = UIActivityIndicatorView.init(style: .whiteLarge)
         self.loadingView?.addSubview(indicator)
         indicator.center = self.center
         indicator.startAnimating()
@@ -283,7 +283,7 @@ extension RecordingView {
     fileprivate func setupAudioSession() {
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(AVAudioSessionCategoryPlayAndRecord, mode: AVAudioSessionModeVideoRecording, options: AVAudioSession.CategoryOptions.mixWithOthers)
+            try audioSession.setCategory(AVAudioSession.Category.playAndRecord, mode: AVAudioSession.Mode.videoRecording, options: AVAudioSession.CategoryOptions.mixWithOthers)
         } catch {
             print(String(describing: Self.self) ,#function, "Can't Set Audio Session Category: \(error)")
         }
@@ -342,7 +342,7 @@ extension RecordingView {
     fileprivate func setHiddenLoadingView(status: Bool) {
         DispatchQueue.main.async {
             if let loadingView = self.loadingView {
-                self.bringSubview(toFront: loadingView)
+                self.bringSubviewToFront(loadingView)
                 loadingView.isHidden = status
             }
         }
@@ -375,7 +375,7 @@ extension RecordingView {
 extension RecordingView {
     private func setupAudioKitRecorder() {
         do{
-            try AudioKit.stop()
+            try AKManager.stop()
         }
         catch{
             print ("AudioKit stop error")
@@ -434,14 +434,14 @@ extension RecordingView {
             self.updateHighlightLyrics(time: time)
         }
         
-        AudioKit.output = mainMixer
+        AKManager.output = mainMixer
         do {
             self.periodicFunc?.start()
             if let periodic = self.periodicFunc {
-                try AudioKit.start(withPeriodicFunctions: periodic)
+                try AKManager.start(withPeriodicFunctions: periodic)
             }
             else {
-                try AudioKit.start()
+                try AKManager.start()
             }
         } catch {
             AKLog("AudioKit did not start!")
@@ -459,7 +459,12 @@ extension RecordingView {
     fileprivate func endRecordByAudioKit() {
         mixerBooster.gain = 0
         tape = recorder.audioFile!
-        recordPlayer.load(audioFile: tape)
+        do {
+            try recordPlayer.load(audioFile: tape)
+        } catch {
+            print(error.localizedDescription)
+        }
+        
         
         if let _ = recordPlayer.audioFile?.duration {
             self.periodicFunc?.stop()
@@ -511,7 +516,7 @@ extension RecordingView {
         let soundFileMetadata = AVMutableMetadataItem()
         soundFileMetadata.keySpace = .common
         soundFileMetadata.key = AVMetadataKey.commonKeyArtwork as NSCopying & NSObjectProtocol
-        soundFileMetadata.value = UIImageJPEGRepresentation(artwork, 1) as (NSCopying & NSObjectProtocol)?
+        soundFileMetadata.value = artwork.jpegData(compressionQuality: 1) as (NSCopying & NSObjectProtocol)?
         assetExportSession.outputFileType = AVFileType.mp4
         assetExportSession.outputURL = filePath
         assetExportSession.metadata = [soundFileMetadata]
@@ -928,8 +933,8 @@ extension RecordingView {
         exportSession.outputURL = filePath
         exportSession.outputFileType = AVFileType.mp4
         exportSession.shouldOptimizeForNetworkUse = true
-        let start = CMTimeMakeWithSeconds(0.0, 0)
-        let range = CMTimeRangeMake(start, avAsset.duration)
+        let start = CMTimeMakeWithSeconds(0.0, preferredTimescale: 0)
+        let range = CMTimeRangeMake(start: start, duration: avAsset.duration)
         exportSession.timeRange = range
             
         exportSession.exportAsynchronously(completionHandler: {() -> Void in

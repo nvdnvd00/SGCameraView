@@ -314,7 +314,7 @@ class MovieRecorder {
         metaDataItem.key = AVMetadataKey.commonKeyArtwork as NSCopying & NSObjectProtocol
         if let image = UIImage(named: "ic_pause")/*UIImage(contentsOfFile: artwork)*/ {
             print("ic_pause_")
-            metaDataItem.value = UIImageJPEGRepresentation( image, 1) as (NSCopying & NSObjectProtocol)?
+            metaDataItem.value = image.jpegData(compressionQuality: 1) as (NSCopying & NSObjectProtocol)?
         }
         self.assetWriter?.metadata = [metaDataItem]
     }
