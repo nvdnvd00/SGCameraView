@@ -10,6 +10,10 @@ import AVKit
 import AudioKit
 import Kingfisher
 
+enum RecordingStatus: Int {
+    case idle, preparing, recording
+}
+
 class RecordingView: UIView {
     //UI
     let RECORD_BUTTON_HEIGHT: CGFloat = 60
@@ -18,6 +22,7 @@ class RecordingView: UIView {
     private var vwLyrics = UIView(frame: .zero)
     private var txvLyrics = UITextView(frame: .zero)
     private var imvAlbumPreview = UIImageView(frame: .zero)
+    private var videoView: PreviewView?
     
     //Outside data
     @objc var albumPreview: String?
@@ -36,6 +41,7 @@ class RecordingView: UIView {
     private var isUserScroll: Bool = false
     private var isCancelRecording: Bool = false
     private var latencyTime: Double = 0.0
+    private var isVideoMode: Bool = true
     
     //Audio mode
     private var mic : AKMicrophone?
@@ -48,9 +54,25 @@ class RecordingView: UIView {
     private var mainMixer: AKMixer!
     private var periodicFunc: AKPeriodicFunction?
     
+    //Video mode
+    private var audioMixer: AudioMixer?
+    private var captureSession = AVCaptureSession()
+    private var videoCaptureDevice : AVCaptureDevice?
+    private var videoDeviceDiscoverySession: AVCaptureDevice.DiscoverySession?
+    private var videoOutputQueue: DispatchQueue = DispatchQueue(label: "com.apple.sample.capturepipeline.video")
+    private var videoSettings: [String: Any]?
+    private var videoConnectionOrientation: AVCaptureVideoOrientation?
+    private var videoConnection: AVCaptureConnection?
+    private var videoFormatDescription: CMFormatDescription?
+    private var status: RecordingStatus = .idle
+    private var movieRecorder: MovieRecorder?
+    private var captureOrientation: AVCaptureVideoOrientation = AVCaptureVideoOrientation.portrait
+    let outputVideoURL = RecordingView.getOutputUrl(name: "output.mp4")
+    
     override func draw(_ rect: CGRect) {
         updateLayout()
     }
+    
     override func layoutSubviews() {
         super.layoutSubviews()
         updateLayout()
@@ -81,6 +103,15 @@ class RecordingView: UIView {
         setupLyricsView()
     }
     
+    @objc private func deviceOrientationDidChange() {
+        let deviceOrientation = UIDevice.current.orientation
+        if deviceOrientation.isPortrait || deviceOrientation.isLandscape {
+            if let orientation = AVCaptureVideoOrientation(rawValue: deviceOrientation.rawValue) {
+                self.captureOrientation = orientation
+            }
+        }
+    }
+    
     fileprivate func updateLayout() {
         if self.btnRecord.isHidden {
             updateRecordButtonPosition()
@@ -93,9 +124,23 @@ class RecordingView: UIView {
             self.updateLyricsViewPosition()
             self.updateHighlightLyrics(time: 0.0)
         }
-        if self.imvAlbumPreview.frame == .zero {
-            self.showAlbumPreview()
-            self.bringSubviewToFront(self.btnRecord)
+        if self.isVideoMode {
+            if self.videoView == nil {
+                self.videoView = PreviewView(frame: self.frame)
+                self.addSubview(self.videoView!)
+                self.bringSubviewToFront(self.vwLyrics)
+                self.bringSubviewToFront(self.btnRecord)
+                self.requestPermissions()
+                //Register notification
+                NotificationCenter.default.addObserver(self, selector: #selector(deviceOrientationDidChange), name: UIDevice.orientationDidChangeNotification, object: UIDevice.current)
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            }
+        }
+        else {
+            if self.imvAlbumPreview.frame == .zero {
+                self.showAlbumPreview()
+                self.bringSubviewToFront(self.btnRecord)
+            }
         }
     }
     
@@ -108,30 +153,63 @@ class RecordingView: UIView {
         self.btnRecord.frame = CGRect(x: xPosition, y: yPosition, width: self.RECORD_BUTTON_HEIGHT, height: self.RECORD_BUTTON_HEIGHT)
     }
     
-    func startRecording() {
-        DispatchQueue.main.async {
-            self.loadingView?.isHidden = true
-            self.bringSubviewToFront(self.btnRecord)
-            self.btnRecord.isUserInteractionEnabled = true
-            self.startRecordByAudioKit()
+    private func showAlbumPreview() {
+        let padding = self.btnRecord.frame.origin.y - (self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height)
+        let height = padding * 2 / 3
+        let width = height
+        let xPosition = (self.bounds.width - width)/2
+        let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height + (padding - height)/2
+        self.imvAlbumPreview.frame = CGRect(x: xPosition, y: yPosition, width: width, height: height)
+        self.imvAlbumPreview.layer.masksToBounds = true
+        self.imvAlbumPreview.layer.cornerRadius = UIDevice.current.userInterfaceIdiom == .phone ? 5.0 : 20.0
+        if let detail = self.beatDetail, let coverPhoto = detail["coverPhotoUrl"] as? String {
+            self.albumPreview = coverPhoto
         }
-    }
-    
-    func stopRecording() {
-        DispatchQueue.main.async {
-            self.endRecordByAudioKit()
+        if let urlImage = self.albumPreview, let url = URL(string: urlImage) {
+            let processor = DownsamplingImageProcessor(size: self.imvAlbumPreview.bounds.size)
+                |> RoundCornerImageProcessor(cornerRadius: 20)
+            self.imvAlbumPreview.kf.indicatorType = .activity
+            self.imvAlbumPreview.kf.setImage(
+                with: url,
+                placeholder: UIImage(named: "Image"),
+                options: [
+                    .processor(processor),
+                    .scaleFactor(UIScreen.main.scale),
+                    .transition(.fade(1)),
+                    .cacheOriginalImage
+                ], completionHandler:
+                    {
+                        result in
+                        switch result {
+                        case .success(let value):
+                            print("Task done for: \(value.source.url?.absoluteString ?? "")")
+                        case .failure(let error):
+                            print("Job failed: \(error.localizedDescription)")
+                        }
+                    })
         }
+        else {
+            self.imvAlbumPreview.image = UIImage(named: "Image")
+        }
+        self.imvAlbumPreview.contentMode = .scaleAspectFill
+        self.addSubview(self.imvAlbumPreview)
     }
     
     @objc func cancelRecording() {
         print(String(describing: Self.self) ,#function)
         isCancelRecording = true
-        
-        if let beatPlayer = self.beatPlayer, beatPlayer.isPlaying {
-            self.mixerBooster.gain = 0
-            self.beatPlayer?.stop()
-            self.periodicFunc?.stop()
-            self.recorder.stop()
+        if self.isVideoMode {
+            DispatchQueue.main.async {
+                self.stopRecordingVideo()
+            }
+        }
+        else {
+            if let beatPlayer = self.beatPlayer, beatPlayer.isPlaying {
+                self.mixerBooster.gain = 0
+                self.beatPlayer?.stop()
+                self.periodicFunc?.stop()
+                self.recorder.stop()
+            }
         }
     }
     
@@ -168,8 +246,10 @@ extension RecordingView {
             stopRecording()
         }
         else {
-            if let beat = self.beat, let _ = URL(string: beat) {
-                self.setupAudioKitRecorder()
+            if !self.isVideoMode {
+                if let beat = self.beat, let _ = URL(string: beat) {
+                    self.setupAudioKitRecorder()
+                }
             }
             setupCountdownTimer()
             sender.isUserInteractionEnabled = false
@@ -265,7 +345,159 @@ extension RecordingView {
         }
     }
 }
-//MARK: - AudioKit
+//MARK: - Request permission
+extension RecordingView {
+    fileprivate func requestPermissions() {
+        requestVideoPermissions()
+        requestAudioPermissions()
+    }
+    
+    fileprivate func requestVideoPermissions() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: // The user has previously granted access to the camera.
+            DispatchQueue.main.async {
+                self.setupCaptureSession()
+            }
+            
+        case .notDetermined: // The user has not yet been asked for camera access.
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                if granted {
+                    DispatchQueue.main.async {
+                        self.setupCaptureSession()
+                    }
+                } else {
+                    self.showErrorPermission()
+                }
+            }
+            
+        case .denied: // The user has previously denied access.
+            showErrorPermission()
+            return
+            
+        case .restricted: // The user can't grant access due to restrictions.
+            showErrorPermission()
+            return
+        @unknown default:
+            showErrorPermission()
+        }
+    }
+    
+    fileprivate func requestAudioPermissions() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            print("Authorized access Microphone")
+        case .notDetermined: // The user has not yet been asked for camera access.
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                if granted {
+                    print("Authorized access Microphone")
+                } else {
+                    self.showErrorPermission()
+                }
+            }
+            
+        case .denied: // The user has previously denied access.
+            showErrorPermission()
+            return
+            
+        case .restricted: // The user can't grant access due to restrictions.
+            showErrorPermission()
+            return
+            
+        @unknown default:
+            showErrorPermission()
+        }
+    }
+    
+    fileprivate func showErrorPermission() {
+        let alert = UIAlertController(title: "Error", message: "Please allow the app to access Camera and Microphone", preferredStyle: .alert)
+        UIApplication.shared.keyWindow?.rootViewController?.presentedViewController?.present(alert, animated: true)
+    }
+    
+    fileprivate func setupCaptureSession() {
+        guard let beat = self.beat, let bgMusic = URL(string: beat) else {
+            print("Cannot load beat")
+            return
+        }
+        audioMixer = AudioMixer(bgMusic: bgMusic)
+        // Do any additional setup after loading the view.
+        if #available(iOS 10.2, *) {
+            videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera],
+                                                                           mediaType: .video, position: .unspecified)
+        }
+        else {
+            videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera],
+                                                                           mediaType: .video, position: .unspecified)
+        }
+        if let device = videoDeviceDiscoverySession?.devices.first(where: { $0.position == .front }) {
+            do {
+                try self.captureSession.addInput(AVCaptureDeviceInput(device: device))
+                self.videoCaptureDevice = device
+            } catch {
+                print("cannot add input")
+            }
+        }
+        let dataOutput = AVCaptureVideoDataOutput()
+        
+        dataOutput.setSampleBufferDelegate(self, queue: videoOutputQueue)
+        
+        self.captureSession.addOutput(dataOutput)
+        
+        videoSettings = dataOutput.recommendedVideoSettingsForAssetWriter(writingTo: .mp4)
+        videoConnection = dataOutput.connection(with: .video)
+        videoConnectionOrientation = videoConnection?.videoOrientation
+        self.videoView?.session = self.captureSession
+        self.videoView?.videoPreviewLayer.videoGravity = .resizeAspectFill
+        self.captureSession.startRunning()
+    }
+    
+    fileprivate func transformCaptureVideoOrientation(_ orientation: AVCaptureVideoOrientation, mirroring:Bool = false) -> CGAffineTransform {
+        var transform = CGAffineTransform.identity
+        
+        // Calculate offsets from an arbitrary reference orientation (portrait)
+        let orientationAngleOffset = angleOffsetFromPortraitOrientationToOrientation(orientation)
+        let videoOrientationAngleOffset = angleOffsetFromPortraitOrientationToOrientation(videoConnectionOrientation ?? AVCaptureVideoOrientation.portrait)
+        
+        // Find the difference in angle between the desired orientation and the video orientation
+        let angleOffset = orientationAngleOffset - videoOrientationAngleOffset
+        transform = CGAffineTransform(rotationAngle: CGFloat(angleOffset))
+        
+        if (self.videoCaptureDevice?.position == .front) {
+            if (mirroring) {
+                transform = transform.scaledBy( x: -1, y: 1 );
+            } else {
+                if orientation == .portrait || orientation == .portraitUpsideDown {
+                    transform = transform.rotated( by: CGFloat(Double.pi) );
+                }
+            }
+        }
+        
+        return transform
+    }
+    
+    func angleOffsetFromPortraitOrientationToOrientation(_ orientation: AVCaptureVideoOrientation) -> Double {
+        var angle: Double = 0.0;
+        switch(orientation) {
+        case .portrait:
+            angle = 0.0
+        case .portraitUpsideDown:
+            angle = .pi
+        case .landscapeRight:
+            angle = -.pi/2.0
+        case .landscapeLeft:
+            angle = .pi/2.0
+        default:
+            break;
+        }
+        return angle;
+    }
+    
+    static func getOutputUrl(name: String) -> URL {
+        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        let fileUrl = paths[0].appendingPathComponent(name)
+        return fileUrl
+    }
+}
+//MARK: - Setup AudioKit
 extension RecordingView {
     private func setupAudioKitRecorder() {
         do{
@@ -299,7 +531,7 @@ extension RecordingView {
             self.beatPlayer = AKPlayer(audioFile: beatFile)
             self.beatPlayer?.volume = 0.8
             self.beatPlayer?.completionHandler = {
-                self.stopRecording()
+                self.stopRecordingAudio()
                 self.btnRecord.isSelected = !self.btnRecord.isSelected
             }
             let micBooster = AKBooster(mic, gain: initMicGain)
@@ -581,46 +813,138 @@ extension RecordingView {
 }
 //MARK: - Record
 extension RecordingView {
-    private func showAlbumPreview() {
-        let padding = self.btnRecord.frame.origin.y - (self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height)
-        let height = padding * 2 / 3
-        let width = height
-        let xPosition = (self.bounds.width - width)/2
-        let yPosition = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height + (padding - height)/2
-        self.imvAlbumPreview.frame = CGRect(x: xPosition, y: yPosition, width: width, height: height)
-        self.imvAlbumPreview.layer.masksToBounds = true
-        self.imvAlbumPreview.layer.cornerRadius = UIDevice.current.userInterfaceIdiom == .phone ? 5.0 : 20.0
-        if let detail = self.beatDetail, let coverPhoto = detail["coverPhotoUrl"] as? String {
-            self.albumPreview = coverPhoto
-        }
-        if let urlImage = self.albumPreview, let url = URL(string: urlImage) {
-            let processor = DownsamplingImageProcessor(size: self.imvAlbumPreview.bounds.size)
-                |> RoundCornerImageProcessor(cornerRadius: 20)
-            self.imvAlbumPreview.kf.indicatorType = .activity
-            self.imvAlbumPreview.kf.setImage(
-                with: url,
-                placeholder: UIImage(named: "Image"),
-                options: [
-                    .processor(processor),
-                    .scaleFactor(UIScreen.main.scale),
-                    .transition(.fade(1)),
-                    .cacheOriginalImage
-                ], completionHandler:
-                    {
-                        result in
-                        switch result {
-                        case .success(let value):
-                            print("Task done for: \(value.source.url?.absoluteString ?? "")")
-                        case .failure(let error):
-                            print("Job failed: \(error.localizedDescription)")
-                        }
-                    })
+    ///Handle for both case: video and audio
+    fileprivate func startRecording() {
+        if self.isVideoMode {
+            self.startRecordingVideo()
         }
         else {
-            self.imvAlbumPreview.image = UIImage(named: "Image")
+            self.startRecordingAudio()
         }
-        self.imvAlbumPreview.contentMode = .scaleAspectFill
-        self.addSubview(self.imvAlbumPreview)
+    }
+    
+    ///Handle for both case: video and audio
+    fileprivate func stopRecording() {
+        if self.isVideoMode {
+            self.stopRecordingVideo()
+        }
+        else {
+            self.stopRecordingAudio()
+        }
+    }
+    
+    fileprivate func startRecordingAudio() {
+        DispatchQueue.main.async {
+            self.loadingView?.isHidden = true
+            self.bringSubviewToFront(self.btnRecord)
+            self.btnRecord.isUserInteractionEnabled = true
+            self.startRecordByAudioKit()
+        }
+    }
+    
+    fileprivate func stopRecordingAudio() {
+        DispatchQueue.main.async {
+            self.endRecordByAudioKit()
+        }
+    }
+    
+    fileprivate func startRecordingVideo() {
+        let callbackQueue = DispatchQueue(label: "com.apple.sample.capturepipeline.recordercallback")
+        audioMixer?.delegate = self
+        audioMixer?.prepare()
+        movieRecorder = MovieRecorder(outputUrl: outputVideoURL, delegate: self, callbackQueue: callbackQueue)
+        
+        if let videoFormatDescription = self.videoFormatDescription, let videoSettings = self.videoSettings {
+            let transform = self.transformCaptureVideoOrientation(self.captureOrientation)
+            movieRecorder?.addVideoTrack(formatDescription: videoFormatDescription, transform: transform, settings: videoSettings)
+        }
+        
+        if let audioFormat = audioMixer?.audioFormatDescrition, let audioSettings = audioMixer?.audioSettings {
+            movieRecorder?.addAudioTrack(formatDescription: audioFormat, settings: audioSettings)
+        }
+        
+        movieRecorder?.prepareToRecord()
+        status = .preparing
+        btnRecord.isSelected = true
+        btnRecord.isUserInteractionEnabled = true
+    }
+    
+    fileprivate func stopRecordingVideo() {
+        if status == .preparing {
+            return
+        }
+        if status == .recording {
+            btnRecord.isSelected = false
+            movieRecorder?.finishRecording()
+            audioMixer?.stop()
+            status = .idle
+        }
+    }
+}
+
+//MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+extension RecordingView: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        print("drop sampleBuffer")
+    }
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer)
+        if videoFormatDescription == nil {
+            videoFormatDescription = formatDescription
+        }
+        
+        if status == .recording {
+            movieRecorder?.appendVideo(sampleBuffer: sampleBuffer)
+        }
+    }
+}
+
+//MARK: - New Concept - AudioMixerDelegate
+extension RecordingView: AudioMixerDelegate {
+    func audioMixerMusicDidFinish(_ mixer: AudioMixer) {
+        self.stopRecordingVideo()
+    }
+    
+    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer, currentTime: Double) {
+        DispatchQueue.main.async {
+            self.updateHighlightLyrics(time: currentTime)
+        }
+        if status == .recording {
+            movieRecorder?.appendAudio(sampleBuffer: sampleBuffer)
+        }
+    }
+}
+
+//MARK: - New Concept - MovieRecorderDelegate
+extension RecordingView: MovieRecorderDelegate {
+    func movieRecorderDidFinishPreparing(recorder: MovieRecorder) {
+        print("movieRecorderDidFinishPreparing")
+        status = .recording
+        audioMixer?.start()
+    }
+    
+    func movieRecorder(recorder: MovieRecorder, didFailWithError error: Error?) {
+        print("movieRecorder didFailWithError \(String(describing: error))")
+        status = .idle
+    }
+    
+    func movieRecorderDidFinishRecording(recorder: MovieRecorder) {
+        print("movieRecorderDidFinishRecording")
+        status = .idle
+//        UISaveVideoAtPathToSavedPhotosAlbum(outputVideoURL.path, nil, nil, nil)
+        DispatchQueue.main.async {
+            if self.isCancelRecording {
+                //Do nothing
+            }
+            else {
+                if let completion = self.onRecordingEnd {
+                    //Type = 1: audio
+                    //Type = 2: video
+                    completion(["data":["recordedUrl": self.outputVideoURL.path, "mergedUrl": self.outputVideoURL.path, "type": 2]])
+                }
+            }
+            
+        }
     }
 }
 
