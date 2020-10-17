@@ -20,9 +20,17 @@ class RecordingView: UIView {
     private var loadingView: UIView?
     private var btnRecord = UIButton(type: .custom)
     private var vwLyrics = UIView(frame: .zero)
+    private var vwSelectRecordMode = UIView(frame: .zero)
+    private var imvKaraoke = UIImageView(frame: .zero)
+    private var lblName = UILabel(frame: .zero)
+    private var lblAlbum = UILabel(frame: .zero)
+    private var lblAudio = UILabel(frame: .zero)
+    private var lblVideo = UILabel(frame: .zero)
+    private var switchModeRecord = UISwitch(frame: .zero)
     private var txvLyrics = UITextView(frame: .zero)
     private var imvAlbumPreview = UIImageView(frame: .zero)
     private var videoView: PreviewView?
+    private var btnSwitchCamera = UIButton(type: .custom)
     
     //Outside data
     @objc var albumPreview: String?
@@ -41,7 +49,7 @@ class RecordingView: UIView {
     private var isUserScroll: Bool = false
     private var isCancelRecording: Bool = false
     private var latencyTime: Double = 0.0
-    private var isVideoMode: Bool = true
+    private var isVideoMode: Bool = false
     
     //Audio mode
     private var mic : AKMicrophone?
@@ -101,6 +109,8 @@ class RecordingView: UIView {
             self.setupAudioKitRecorder()
         }
         setupLyricsView()
+        setupSelectRecordModeView()
+        setupSwitchCamera()
     }
     
     @objc private func deviceOrientationDidChange() {
@@ -123,25 +133,38 @@ class RecordingView: UIView {
             self.parseLyrics()
             self.updateLyricsViewPosition()
             self.updateHighlightLyrics(time: 0.0)
+            self.updateSelectRecordViewPosition()
+            self.txvLyrics.isHidden = true
         }
-        if self.isVideoMode {
-            if self.videoView == nil {
-                self.videoView = PreviewView(frame: self.frame)
-                self.addSubview(self.videoView!)
-                self.bringSubviewToFront(self.vwLyrics)
-                self.bringSubviewToFront(self.btnRecord)
-                self.requestPermissions()
-                //Register notification
-                NotificationCenter.default.addObserver(self, selector: #selector(deviceOrientationDidChange), name: UIDevice.orientationDidChangeNotification, object: UIDevice.current)
-                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-            }
+        if self.videoView == nil {
+            self.videoView = PreviewView(frame: self.frame)
+            self.addSubview(self.videoView!)
+            self.bringSubviewToFront(self.vwLyrics)
+            self.bringSubviewToFront(self.btnRecord)
+            self.requestPermissions()
+            //Register notification
+            NotificationCenter.default.addObserver(self, selector: #selector(deviceOrientationDidChange), name: UIDevice.orientationDidChangeNotification, object: UIDevice.current)
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            self.videoView?.isHidden = !self.isVideoMode
         }
-        else {
-            if self.imvAlbumPreview.frame == .zero {
-                self.showAlbumPreview()
-                self.bringSubviewToFront(self.btnRecord)
-            }
+        if self.imvAlbumPreview.frame == .zero {
+            self.showAlbumPreview()
+            self.bringSubviewToFront(self.btnRecord)
+            self.imvAlbumPreview.isHidden = self.isVideoMode
         }
+        
+        if self.btnSwitchCamera.frame == .zero {
+            updateSwitchCameraButtonPosition()
+        }
+    }
+    
+    fileprivate func updateSwitchCameraButtonPosition() {
+        var frame = CGRect(x: 0, y: 0, width: 50, height: 50)
+        let x = self.bounds.size.width - frame.size.width - 10
+        let y = self.vwLyrics.frame.origin.y + self.vwLyrics.frame.size.height + 10
+        frame.origin.x = x
+        frame.origin.y = y
+        self.btnSwitchCamera.frame = frame
     }
     
     fileprivate func updateRecordButtonPosition() {
@@ -252,6 +275,14 @@ extension RecordingView {
                 }
             }
             setupCountdownTimer()
+            self.txvLyrics.isHidden = false
+            self.txvLyrics.alpha = 0
+            self.btnSwitchCamera.isHidden = true
+            self.txvLyrics.alpha = 0
+            UIView.animate(withDuration: 1.5) {
+                self.vwSelectRecordMode.alpha = 0
+                self.txvLyrics.alpha = 1
+            }
             sender.isUserInteractionEnabled = false
         }
         sender.isSelected = !sender.isSelected
@@ -282,6 +313,104 @@ extension RecordingView {
         self.addSubview(self.vwLyrics)
     }
     
+    fileprivate func setupSelectRecordModeView() {
+        self.vwSelectRecordMode.backgroundColor = .clear
+        self.vwLyrics.addSubview(self.vwSelectRecordMode)
+
+        self.imvKaraoke.image = UIImage(named: "ic_karaoke")
+        self.vwSelectRecordMode.addSubview(imvKaraoke)
+        
+        self.lblName.font = UIFont.boldSystemFont(ofSize: 20)
+        self.lblName.textAlignment = .center
+        self.lblName.textColor = .white
+        self.vwSelectRecordMode.addSubview(self.lblName)
+        
+        self.lblAlbum.font = UIFont.systemFont(ofSize: 14)
+        self.lblAlbum.textAlignment = .center
+        self.lblAlbum.textColor = .lightGray
+        self.vwSelectRecordMode.addSubview(self.lblAlbum)
+        
+        self.lblAudio.font = UIFont.systemFont(ofSize: 14)
+        self.lblAudio.textAlignment = .right
+        self.lblAudio.textColor = .darkGray
+        self.lblAudio.text = "Ganzer Song"
+        self.vwSelectRecordMode.addSubview(self.lblAudio)
+        
+        self.lblVideo.font = UIFont.systemFont(ofSize: 14)
+        self.lblVideo.textAlignment = .left
+        self.lblVideo.textColor = .lightGray
+        self.lblVideo.text = "Refrain"
+        self.vwSelectRecordMode.addSubview(self.lblVideo)
+        
+        self.switchModeRecord.tintColor = UIColor.lightGray.withAlphaComponent(0.75)
+        self.switchModeRecord.onTintColor = .darkGray
+        self.vwSelectRecordMode.addSubview(self.switchModeRecord)
+        self.switchModeRecord.addTarget(self, action: #selector(onSwitchRecordMode(sender:)), for: .valueChanged)
+    }
+    
+    @objc private func onSwitchRecordMode(sender: UISwitch) {
+        if sender.isOn {
+            self.btnSwitchCamera.isHidden = false
+            self.videoView?.isHidden = false
+            self.imvAlbumPreview.isHidden = true
+            self.bringSubviewToFront(self.btnRecord)
+            self.bringSubviewToFront(self.btnSwitchCamera)
+            
+            self.lblVideo.textColor = .darkGray
+            self.lblAudio.textColor = .lightGray
+            self.isVideoMode = true
+        }
+        else {
+            self.btnSwitchCamera.isHidden = true
+            self.videoView?.isHidden = true
+            self.imvAlbumPreview.isHidden = false
+            self.bringSubviewToFront(self.btnRecord)
+            
+            self.lblVideo.textColor = .lightGray
+            self.lblAudio.textColor = .darkGray
+            self.isVideoMode = false
+        }
+    }
+    
+    fileprivate func setupSwitchCamera() {
+        self.btnSwitchCamera.setImage(UIImage(named: "ic_switch_camera"), for: .normal)
+        self.addSubview(self.btnSwitchCamera)
+        self.bringSubviewToFront(btnSwitchCamera)
+        self.btnSwitchCamera.isHidden = !self.isVideoMode
+        self.btnSwitchCamera.addTarget(self, action: #selector(onSwitchCamera(sender:)), for: .touchUpInside)
+    }
+    
+    @objc private func onSwitchCamera(sender: UIButton) {
+        guard let videoCaptureDevice = self.videoCaptureDevice else {
+            return
+        }
+        if let inputs = self.captureSession.inputs as? [AVCaptureDeviceInput] {
+            for input in inputs {
+                self.captureSession.removeInput(input)
+            }
+        }
+        if videoCaptureDevice.position == .front {
+            if let device = videoDeviceDiscoverySession?.devices.first(where: { $0.position == .back }) {
+                do {
+                    try self.captureSession.addInput(AVCaptureDeviceInput(device: device))
+                    self.videoCaptureDevice = device
+                } catch {
+                    print("cannot add input")
+                }
+            }
+        }
+        else {
+            if let device = videoDeviceDiscoverySession?.devices.first(where: { $0.position == .front }) {
+                do {
+                    try self.captureSession.addInput(AVCaptureDeviceInput(device: device))
+                    self.videoCaptureDevice = device
+                } catch {
+                    print("cannot add input")
+                }
+            }
+        }
+    }
+    
     fileprivate func updateLyricsViewPosition() {
         let paddingTop: CGFloat = 55
         let paddingBottom: CGFloat = paddingTop + 5
@@ -299,6 +428,47 @@ extension RecordingView {
         gradient.locations = [0.0, 0.75]
         gradient.frame = self.vwLyrics.frame
         self.vwLyrics.layer.insertSublayer(gradient, at: 0)
+    }
+    
+    fileprivate func updateSelectRecordViewPosition() {
+        self.vwSelectRecordMode.frame = CGRect(x: 0, y: 0, width: self.vwLyrics.bounds.size.width, height: self.vwLyrics.bounds.size.height)
+        self.vwSelectRecordMode.autoresizingMask = [.flexibleTopMargin, .flexibleRightMargin, .flexibleBottomMargin, .flexibleLeftMargin]
+        
+        if let detail = self.beatDetail {
+            let name = detail["name"] as? String
+            self.lblName.text = name
+            
+            let karaokeFile = detail["karaokeFile"] as? Dictionary<String, Any>
+            let albumText = karaokeFile?["artist"] as? String
+            self.lblAlbum.text = albumText
+        }
+        
+        self.imvKaraoke.frame = CGRect(x: 0, y: 0, width: 74, height: 64)
+        var center = self.vwSelectRecordMode.center
+        center.y = center.y - 64
+        self.imvKaraoke.center = center
+        
+        let yName = self.imvKaraoke.frame.origin.y + self.imvKaraoke.frame.size.height + 10
+        self.lblName.frame = CGRect(x: 0, y: yName , width: self.vwSelectRecordMode.bounds.size.width, height: 25)
+        self.lblName.autoresizingMask = [.flexibleTopMargin, .flexibleRightMargin, .flexibleLeftMargin]
+        
+        let yAlbum = self.lblName.frame.origin.y + self.lblName.frame.size.height
+        self.lblAlbum.frame = CGRect(x: 0, y: yAlbum , width: self.vwSelectRecordMode.bounds.size.width, height: 16)
+        self.lblAlbum.autoresizingMask = [.flexibleTopMargin, .flexibleRightMargin, .flexibleLeftMargin]
+        
+        let ySwitch = self.lblAlbum.frame.origin.y + self.lblAlbum.frame.size.height + 30
+        var frame = self.switchModeRecord.frame
+        frame.origin.y = ySwitch
+        frame.origin.x = self.vwSelectRecordMode.center.x - frame.size.width/2
+        self.switchModeRecord.frame = frame
+        self.switchModeRecord.autoresizingMask = [.flexibleTopMargin]
+        
+        self.lblAudio.frame = CGRect(x: frame.origin.x - 100 - 10, y: frame.origin.y, width: 100, height: frame.size.height)
+        self.lblAudio.autoresizingMask = [.flexibleLeftMargin]
+        
+        let xVideo = frame.origin.x + frame.size.width + 10
+        self.lblVideo.frame = CGRect(x: xVideo, y: frame.origin.y, width: 50, height: frame.size.height)
+        self.lblVideo.autoresizingMask = [.flexibleRightMargin]
     }
     
     fileprivate func parseLyrics() {
@@ -461,13 +631,11 @@ extension RecordingView {
         let angleOffset = orientationAngleOffset - videoOrientationAngleOffset
         transform = CGAffineTransform(rotationAngle: CGFloat(angleOffset))
         
-        if (self.videoCaptureDevice?.position == .front) {
-            if (mirroring) {
-                transform = transform.scaledBy( x: -1, y: 1 );
-            } else {
-                if orientation == .portrait || orientation == .portraitUpsideDown {
-                    transform = transform.rotated( by: CGFloat(Double.pi) );
-                }
+        if (mirroring) {
+            transform = transform.scaledBy( x: -1, y: 1 );
+        } else {
+            if orientation == .portrait || orientation == .portraitUpsideDown {
+                transform = transform.rotated( by: CGFloat(Double.pi) );
             }
         }
         
