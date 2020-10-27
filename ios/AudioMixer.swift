@@ -11,19 +11,20 @@ import AVFoundation
 
 protocol AudioMixerDelegate: class {
     func audioMixerMusicDidFinish(_ mixer: AudioMixer)
-    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer, currentTime: Double)
+    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer)
 }
 
 class AudioMixer {
     private(set) var backgroundMusicURL: URL
     
     private var audioEngine: AVAudioEngine = AVAudioEngine()
-    private var audioMixer: AVAudioNode = AVAudioNode()
+    private var audioMixer: AVAudioMixerNode = AVAudioMixerNode()
     private var playerNodeForMixer: AVAudioPlayerNode = AVAudioPlayerNode()
     
     private(set) var isRuninng: Bool = false
     weak var delegate: AudioMixerDelegate?
     
+    private var isPlayerReady = false
     
     init(bgMusic: URL) {
         self.backgroundMusicURL = bgMusic
@@ -64,38 +65,36 @@ class AudioMixer {
         audioEngine.connect(muteMixer, to: mainMixer, format: mixerOutputFormat)
         
         // background audio
-        if let backgroundAudio = try? AVAudioFile(forReading: backgroundMusicURL) {
-            let connectionPoints = [
-                AVAudioConnectionPoint(node: audioMixer, bus: audioMixer.nextAvailableInputBus),
-                AVAudioConnectionPoint(node: mainMixer, bus: mainMixer.nextAvailableInputBus)
-            ]
-            audioEngine.connect(playerNodeForMixer, to: connectionPoints, fromBus: 0, format: backgroundAudio.processingFormat)
-            playerNodeForMixer.scheduleFile(backgroundAudio, at: nil) { [weak self] in
-                guard let self = self else { return }
-                if let delegate = self.delegate {
-                    DispatchQueue.main.async {
-                        delegate.audioMixerMusicDidFinish(self)
-                    }
-                }
+        let connectionPoints = [
+            AVAudioConnectionPoint(node: audioMixer, bus: audioMixer.nextAvailableInputBus),
+            AVAudioConnectionPoint(node: mainMixer, bus: mainMixer.nextAvailableInputBus)
+        ]
+        let playerNodeFormat = playerNodeForMixer.outputFormat(forBus: 0)
+        audioEngine.connect(playerNodeForMixer, to: connectionPoints, fromBus: 0, format: playerNodeFormat)
+        
+        self.audioMixer = audioMixer
+        self.playerNodeForMixer = playerNodeForMixer
+        
+        //Tap Audio + Mic out
+        let bufferSize: UInt32 = 1024
+        let tapFormat = audioMixer.outputFormat(forBus: 0)
+        audioMixer.installTap(onBus: 0, bufferSize: bufferSize, format: tapFormat) {[weak self] (buffer, when) in
+            guard let self = self, self.isRuninng, self.playerNodeForMixer.isPlaying else { return }
+            if let delegate = self.delegate, let sampleBuffer = buffer.createAudioSampleBufferWithATS(ATS: when) {
+                delegate.audioMixerDidReceive(sampleBuffer: sampleBuffer)
             }
         }
         
         //Tap Audio out
-        let tapFormat = audioMixer.outputFormat(forBus: 0)
-        audioMixer.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) {[weak self] (buffer, when) in
-            guard let self = self, self.isRuninng else { return }
-            if let delegate = self.delegate, let sampleBuffer = buffer.createAudioSampleBufferWithATS(ATS: when) {
-                var currentTime: Double = 0.0
-                if let nodeTime = self.playerNodeForMixer.lastRenderTime ,let playerTime = self.playerNodeForMixer.playerTime(forNodeTime: nodeTime) {
-                    currentTime = Double(playerTime.sampleTime) / playerTime.sampleRate
-//                    print("Current time: \(currentTime)")
-                }
-                delegate.audioMixerDidReceive(sampleBuffer: sampleBuffer, currentTime: currentTime)
+        /*
+        let audioWriter = try! AVAudioFile(forWriting: try! ViewController.getOutputUrl(name: "audio_out.aac"), settings: self.audioSettings)
+        let tapPlayerFormat = playerNodeForMixer.outputFormat(forBus: 0)
+        playerNodeForMixer.installTap(onBus: 0, bufferSize: bufferSize, format: tapPlayerFormat) {[weak self] (buffer, when) in
+            if let self = self, self.playerNodeForMixer.isPlaying {
+                try? audioWriter.write(from: buffer)
             }
-        }
+        }*/
         
-        self.audioMixer = audioMixer
-        self.playerNodeForMixer = playerNodeForMixer
         self.audioEngine.reset()
         self.audioEngine.prepare()
     }
@@ -104,20 +103,38 @@ class AudioMixer {
         if isRuninng {
             return
         }
+        isPlayerReady = false
+        isRuninng = true
+        
         do {
             try self.audioEngine.start()
-            self.playerNodeForMixer.play()
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {//Make sure engine start before player start to avoid audio cut off
+                
+            
+//            }
+            // background audio
+            if let backgroundAudio = try? AVAudioFile(forReading: backgroundMusicURL) {
+                playerNodeForMixer.play()
+                playerNodeForMixer.scheduleFile(backgroundAudio, at: nil) { [weak self] in
+                    guard let self = self else { return }
+                    if let delegate = self.delegate {
+                        DispatchQueue.main.async {
+                            delegate.audioMixerMusicDidFinish(self)
+                        }
+                    }
+                }
+            }
         } catch {
             print("audioEngine.start error \(error)")
         }
-        isRuninng = true
     }
     
     func stop() {
         self.audioEngine.stop()
         self.audioMixer.removeTap(onBus: 0)
+        self.playerNodeForMixer.removeTap(onBus: 0)
         
-        try? AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playback)
+        try? AVAudioSession.sharedInstance().setCategory(.playback)
         try? AVAudioSession.sharedInstance().setActive(true)
         isRuninng = false
     }
@@ -175,7 +192,12 @@ extension AVAudioPCMBuffer {
         
         let bufferListPointer = UnsafeMutableAudioBufferListPointer(self.mutableAudioBufferList)
         let count = CMItemCount(bufferListPointer[1].mDataByteSize / asbd.pointee.mBytesPerFrame)
+//        var dataBuffer: CMBlockBuffer? = nil
+//        var blockSize = Int(asbd.pointee.mBytesPerFrame * asbd.pointee.mChannelsPerFrame)
+//        error = CMBlockBufferCreateWithMemoryBlock(allocator: kCFAllocatorDefault, memoryBlock: nil, blockLength: blockSize, blockAllocator: nil, customBlockSource: nil, offsetToData: 0, dataLength: blockSize, flags: 0, blockBufferOut: &dataBuffer)
         error = CMAudioSampleBufferCreateWithPacketDescriptions(allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false, makeDataReadyCallback: nil, refcon: nil, formatDescription: format!, sampleCount: count, presentationTimeStamp: PTS, packetDescriptions: nil, sampleBufferOut: &sampleBuffer)
+//        error = CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: kCFAllocatorDefault, dataBuffer: dataBuffer!, formatDescription: format!, sampleCount: count, presentationTimeStamp: PTS, packetDescriptions: nil, sampleBufferOut: &sampleBuffer)
+        
         if error != noErr {
             return nil
         }

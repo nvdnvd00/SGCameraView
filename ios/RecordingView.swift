@@ -16,7 +16,8 @@ enum RecordingStatus: Int {
 
 class RecordingView: UIView {
     //UI
-    let RECORD_BUTTON_HEIGHT: CGFloat = 60
+    let RECORD_BUTTON_HEIGHT: CGFloat = 70
+    let SWITCH_MODE_RECORD_BUTTON_HEIGHT: CGFloat = 50
     private var loadingView: UIView?
     private var btnRecord = UIButton(type: .custom)
     private var vwLyrics = UIView(frame: .zero)
@@ -24,13 +25,11 @@ class RecordingView: UIView {
     private var imvKaraoke = UIImageView(frame: .zero)
     private var lblName = UILabel(frame: .zero)
     private var lblAlbum = UILabel(frame: .zero)
-    private var lblAudio = UILabel(frame: .zero)
-    private var lblVideo = UILabel(frame: .zero)
-    private var switchModeRecord = UISwitch(frame: .zero)
     private var txvLyrics = UITextView(frame: .zero)
     private var imvAlbumPreview = UIImageView(frame: .zero)
     private var videoView: PreviewView?
     private var btnSwitchCamera = UIButton(type: .custom)
+    private var btnSwitchModeRecord = UIButton(type: .custom)
     
     //Outside data
     @objc var albumPreview: String?
@@ -76,6 +75,7 @@ class RecordingView: UIView {
     private var movieRecorder: MovieRecorder?
     private var captureOrientation: AVCaptureVideoOrientation = AVCaptureVideoOrientation.portrait
     let outputVideoURL = RecordingView.getOutputUrl(name: "output.mp4")
+    private var startTimeRecord: TimeInterval?
     
     override func draw(_ rect: CGRect) {
         updateLayout()
@@ -156,6 +156,20 @@ class RecordingView: UIView {
         if self.btnSwitchCamera.frame == .zero {
             updateSwitchCameraButtonPosition()
         }
+        if self.btnSwitchModeRecord.frame == .zero {
+            updateSwitchModeRecordButtonPosition()
+        }
+    }
+    
+    fileprivate func updateSwitchModeRecordButtonPosition() {
+        let xPosition: CGFloat = 10
+        let yPosition: CGFloat = self.frame.size.height - self.SWITCH_MODE_RECORD_BUTTON_HEIGHT - 10
+        if self.btnSwitchModeRecord.isHidden {
+            self.btnSwitchModeRecord.isHidden = false
+        }
+        self.btnSwitchModeRecord.frame = CGRect(x: xPosition, y: yPosition, width: self.SWITCH_MODE_RECORD_BUTTON_HEIGHT, height: self.SWITCH_MODE_RECORD_BUTTON_HEIGHT)
+        self.btnSwitchModeRecord.layer.cornerRadius = self.SWITCH_MODE_RECORD_BUTTON_HEIGHT/2
+        self.btnSwitchModeRecord.layer.masksToBounds = true
     }
     
     fileprivate func updateSwitchCameraButtonPosition() {
@@ -330,45 +344,37 @@ extension RecordingView {
         self.lblAlbum.textColor = .lightGray
         self.vwSelectRecordMode.addSubview(self.lblAlbum)
         
-        self.lblAudio.font = UIFont.systemFont(ofSize: 14)
-        self.lblAudio.textAlignment = .right
-        self.lblAudio.textColor = .darkGray
-        self.lblAudio.text = "Ganzer Song"
-        self.vwSelectRecordMode.addSubview(self.lblAudio)
-        
-        self.lblVideo.font = UIFont.systemFont(ofSize: 14)
-        self.lblVideo.textAlignment = .left
-        self.lblVideo.textColor = .lightGray
-        self.lblVideo.text = "Refrain"
-        self.vwSelectRecordMode.addSubview(self.lblVideo)
-        
-        self.switchModeRecord.tintColor = UIColor.lightGray.withAlphaComponent(0.75)
-        self.switchModeRecord.onTintColor = .darkGray
-        self.vwSelectRecordMode.addSubview(self.switchModeRecord)
-        self.switchModeRecord.addTarget(self, action: #selector(onSwitchRecordMode(sender:)), for: .valueChanged)
+        self.btnSwitchModeRecord.backgroundColor = UIColor.gray
+        self.btnSwitchModeRecord.setImage(UIImage(named: "ic_record_with_none_camera"), for: .normal)
+        self.btnSwitchModeRecord.setImage(UIImage(named: "ic_record_with_camera"), for: .selected)
+        self.addSubview(self.btnSwitchModeRecord)
+        self.btnSwitchModeRecord.addTarget(self, action: #selector(onSwitchRecordMode(sender:)), for: .touchUpInside)
     }
     
-    @objc private func onSwitchRecordMode(sender: UISwitch) {
-        if sender.isOn {
+    @objc private func onSwitchRecordMode(sender: UIButton) {
+        if sender.isSelected {
+            //video -> audio
+            self.btnSwitchModeRecord.isSelected = false
+            
+            self.btnSwitchCamera.isHidden = true
+            self.videoView?.isHidden = true
+            self.imvAlbumPreview.isHidden = false
+            self.bringSubviewToFront(self.btnRecord)
+            self.bringSubviewToFront(self.btnSwitchModeRecord)
+            self.isVideoMode = false
+            
+        }
+        else {
+            //audio -> video
+            self.btnSwitchModeRecord.isSelected = true
+            
             self.btnSwitchCamera.isHidden = false
             self.videoView?.isHidden = false
             self.imvAlbumPreview.isHidden = true
             self.bringSubviewToFront(self.btnRecord)
             self.bringSubviewToFront(self.btnSwitchCamera)
-            
-            self.lblVideo.textColor = .darkGray
-            self.lblAudio.textColor = .lightGray
+            self.bringSubviewToFront(self.btnSwitchModeRecord)
             self.isVideoMode = true
-        }
-        else {
-            self.btnSwitchCamera.isHidden = true
-            self.videoView?.isHidden = true
-            self.imvAlbumPreview.isHidden = false
-            self.bringSubviewToFront(self.btnRecord)
-            
-            self.lblVideo.textColor = .lightGray
-            self.lblAudio.textColor = .darkGray
-            self.isVideoMode = false
         }
     }
     
@@ -444,8 +450,7 @@ extension RecordingView {
         }
         
         self.imvKaraoke.frame = CGRect(x: 0, y: 0, width: 74, height: 64)
-        var center = self.vwSelectRecordMode.center
-        center.y = center.y - 64
+        let center = self.vwSelectRecordMode.center
         self.imvKaraoke.center = center
         
         let yName = self.imvKaraoke.frame.origin.y + self.imvKaraoke.frame.size.height + 10
@@ -455,20 +460,6 @@ extension RecordingView {
         let yAlbum = self.lblName.frame.origin.y + self.lblName.frame.size.height
         self.lblAlbum.frame = CGRect(x: 0, y: yAlbum , width: self.vwSelectRecordMode.bounds.size.width, height: 16)
         self.lblAlbum.autoresizingMask = [.flexibleTopMargin, .flexibleRightMargin, .flexibleLeftMargin]
-        
-        let ySwitch = self.lblAlbum.frame.origin.y + self.lblAlbum.frame.size.height + 30
-        var frame = self.switchModeRecord.frame
-        frame.origin.y = ySwitch
-        frame.origin.x = self.vwSelectRecordMode.center.x - frame.size.width/2
-        self.switchModeRecord.frame = frame
-        self.switchModeRecord.autoresizingMask = [.flexibleTopMargin]
-        
-        self.lblAudio.frame = CGRect(x: frame.origin.x - 100 - 10, y: frame.origin.y, width: 100, height: frame.size.height)
-        self.lblAudio.autoresizingMask = [.flexibleLeftMargin]
-        
-        let xVideo = frame.origin.x + frame.size.width + 10
-        self.lblVideo.frame = CGRect(x: xVideo, y: frame.origin.y, width: 50, height: frame.size.height)
-        self.lblVideo.autoresizingMask = [.flexibleRightMargin]
     }
     
     fileprivate func parseLyrics() {
@@ -1070,13 +1061,11 @@ extension RecordingView: AVCaptureVideoDataOutputSampleBufferDelegate {
 //MARK: - New Concept - AudioMixerDelegate
 extension RecordingView: AudioMixerDelegate {
     func audioMixerMusicDidFinish(_ mixer: AudioMixer) {
+        self.startTimeRecord = nil
         self.stopRecordingVideo()
     }
     
-    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer, currentTime: Double) {
-        DispatchQueue.main.async {
-            self.updateHighlightLyrics(time: currentTime)
-        }
+    func audioMixerDidReceive(sampleBuffer: CMSampleBuffer) {
         if status == .recording {
             movieRecorder?.appendAudio(sampleBuffer: sampleBuffer)
         }
@@ -1112,6 +1101,19 @@ extension RecordingView: MovieRecorderDelegate {
                 }
             }
             
+        }
+    }
+    
+    func movieRecorder(_ recorder: MovieRecorder, didAppendAudio sampleBuffer: CMSampleBuffer) {
+        let timeStamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let bufferDuration = CMSampleBufferGetOutputDuration(sampleBuffer)
+        if self.startTimeRecord == nil {
+            self.startTimeRecord = CMTimeGetSeconds(timeStamp)
+        }
+        let duration = CMTimeGetSeconds(timeStamp) - (self.startTimeRecord ?? 0) - CMTimeGetSeconds(bufferDuration)
+        print(duration)
+        DispatchQueue.main.async {
+            self.updateHighlightLyrics(time: duration)
         }
     }
 }

@@ -13,6 +13,7 @@ protocol MovieRecorderDelegate: class {
     func movieRecorderDidFinishPreparing(recorder: MovieRecorder)
     func movieRecorder(recorder: MovieRecorder, didFailWithError error: Error?)
     func movieRecorderDidFinishRecording(recorder: MovieRecorder)
+    func movieRecorder(_ recorder: MovieRecorder, didAppendAudio sampleBuffer: CMSampleBuffer)
 }
 
 enum MRecorderStatus: Int, Comparable {
@@ -278,6 +279,11 @@ class MovieRecorder {
             guard readyToAppend else { return }
             
             let bufferTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            if !self.hasStartedSession && mediaType == .video {
+                //Discard video frame util receive audio frame
+                return
+            }
+            
             if !self.hasStartedSession {
                 self.assetWriter?.startSession(atSourceTime: bufferTime)
                 self.hasStartedSession = true
@@ -286,6 +292,10 @@ class MovieRecorder {
             guard let input = mediaType == .video ? self.videoInput : self.audioInput else { return }
             
             if input.isReadyForMoreMediaData {
+                if mediaType == .audio {
+                    self.delegate?.movieRecorder(self, didAppendAudio: sampleBuffer)
+                }
+                
                 let success = input.append(sampleBuffer)
                 if !success {
                     let error = self.assetWriter?.error
@@ -305,17 +315,5 @@ class MovieRecorder {
     
     private func performInLockQueue(block: () -> Void) {
         lockQueue.sync(flags: .barrier, execute: block)
-    }
-    
-    //Not using now
-    private func addArtwork() {
-        let metaDataItem = AVMutableMetadataItem()
-        metaDataItem.keySpace = .common
-        metaDataItem.key = AVMetadataKey.commonKeyArtwork as NSCopying & NSObjectProtocol
-        if let image = UIImage(named: "ic_pause")/*UIImage(contentsOfFile: artwork)*/ {
-            print("ic_pause_")
-            metaDataItem.value = image.jpegData(compressionQuality: 1) as (NSCopying & NSObjectProtocol)?
-        }
-        self.assetWriter?.metadata = [metaDataItem]
     }
 }
