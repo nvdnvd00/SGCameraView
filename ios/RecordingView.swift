@@ -114,12 +114,12 @@ class RecordingView: UIView {
     }
     
     @objc private func deviceOrientationDidChange() {
-        let deviceOrientation = UIDevice.current.orientation
-        if deviceOrientation.isPortrait || deviceOrientation.isLandscape {
-            if let orientation = AVCaptureVideoOrientation(rawValue: deviceOrientation.rawValue) {
-                self.captureOrientation = orientation
-            }
-        }
+//        let deviceOrientation = UIDevice.current.orientation
+//        if deviceOrientation.isPortrait || deviceOrientation.isLandscape {
+//            if let orientation = AVCaptureVideoOrientation(rawValue: deviceOrientation.rawValue) {
+//                self.captureOrientation = orientation
+//            }
+//        }
     }
     
     fileprivate func updateLayout() {
@@ -296,6 +296,7 @@ extension RecordingView {
             UIView.animate(withDuration: 1.5) {
                 self.vwSelectRecordMode.alpha = 0
                 self.txvLyrics.alpha = 1
+                self.btnSwitchModeRecord.alpha = 0
             }
             sender.isUserInteractionEnabled = false
         }
