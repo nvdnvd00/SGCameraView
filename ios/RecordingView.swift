@@ -694,12 +694,12 @@ extension RecordingView {
                 self.stopRecordingAudio()
                 self.btnRecord.isSelected = !self.btnRecord.isSelected
             }
-            let micBooster = AKBooster(mic, gain: initMicGain)
+            let micBooster = AKBooster(self.mic, gain: initMicGain)
             micMixer = AKMixer(micBooster, self.beatPlayer!)
         }
         else {
             print("Cannot load beat")
-            let micBooster = AKBooster(mic, gain: initMicGain)
+            let micBooster = AKBooster(self.mic, gain: initMicGain)
             micMixer = AKMixer(micBooster)
         }
         
@@ -755,7 +755,15 @@ extension RecordingView {
         if let _ = recordPlayer.audioFile?.duration {
             self.periodicFunc?.stop()
             self.beatPlayer?.stop()
+            self.mic?.stop()
+            self.micMixer.stop()
             recorder.stop()
+            do{
+                try AKManager.stop()
+            }
+            catch{
+                print ("AudioKit stop error")
+            }
             tape.exportAsynchronously(name: "rendered-video.mp4",
                                       baseDir: .documents,
                                       exportFormat: .mp4) { audioFile , exportError in
