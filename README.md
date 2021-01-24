@@ -20,18 +20,11 @@ const beat = <local_path>;
 const lyric = <array_of_obj>;
 
 const Screen = () => {
-  const cameraViewRef = useRef();
-
-  const startRecording = () => {
-    cameraViewRef.current.startRecording();
-  }
-
   const onRecordingEnd = (uri) => {
     // ...
   }
   return (
     <SgCameraView
-      ref={cameraViewRef}
       beat={beat}
       lyric={lyric}
       onRecordingEnd={onRecordingEnd}
