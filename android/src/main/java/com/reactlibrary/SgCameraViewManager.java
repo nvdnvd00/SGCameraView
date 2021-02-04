@@ -5,7 +5,8 @@ import android.view.View;
 
 import androidx.appcompat.widget.AppCompatCheckBox;
 
-import com.facebook.react.uimanager.ReactProp;
+import com.facebook.react.uimanager.annotations.ReactProp;
+
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
 
@@ -32,6 +33,6 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
         return new View(c);
     }
 
-//    @ReactProp(name = "beat")
-//    public void setBeat(View view,String prop){}
+    @ReactProp(name = "beat")
+    public void setBeat(View view,String prop){}
 }
