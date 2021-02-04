@@ -32,6 +32,6 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
         return new View(c);
     }
 
-    @ReactProp(name = "beat")
-    public void setBeat(View view,String prop){}
+//    @ReactProp(name = "beat")
+//    public void setBeat(View view,String prop){}
 }
