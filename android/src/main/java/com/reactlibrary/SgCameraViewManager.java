@@ -29,10 +29,11 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
 //        return cb;
         mContext = c;
         view = new View(c);
-        view.setBackgroundColor(Color.BLUE);
         return new View(c);
     }
 
     @ReactProp(name = "beat")
-    public void setBeat(View view,String prop){}
+    public void setBeat(View view,String prop){
+//        view.setBackgroundColor(Color.BLUE);
+    }
 }
