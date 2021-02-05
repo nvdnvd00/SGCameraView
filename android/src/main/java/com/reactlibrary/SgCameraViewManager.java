@@ -80,8 +80,8 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     @ReactProp(name = "beatDetail")
     public void setBeatDetail(ReactImageView view, @NonNull ReadableMap beatDetail) {
         mBeatDetail = beatDetail;
-        String coverPhotoUrl = beatDetail.hasKey("coverPhotoUrl") ? beatDetail.getString("coverPhotoUrl") : "";
-        System.out.print("coverPhotoUrl:::" + coverPhotoUrl);
+//        String coverPhotoUrl = beatDetail.hasKey("coverPhotoUrl") ? beatDetail.getString("coverPhotoUrl") : "";
+//        System.out.print("coverPhotoUrl:::" + coverPhotoUrl);
 
     }
 
@@ -93,8 +93,8 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     @ReactProp(name = "style")
     public void setStyle(ReactImageView view, @NonNull ReadableMap style) {
         mStyle = style;
-        int width = style.hasKey("width") ? style.getInt("width") : 0;
-        int height = style.hasKey("height") ? style.getInt("height") : 0;
+//        int width = style.hasKey("width") ? style.getInt("width") : 0;
+//        int height = style.hasKey("height") ? style.getInt("height") : 0;
 
     }
 
