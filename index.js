@@ -31,7 +31,7 @@ SgCameraComponent.propTypes = {
 
 const SgCameraView = requireNativeComponent("SgCameraView", SgCameraComponent, {
   nativeOnly: {
-    onChange: true,
+    onRecordingEnd: true,
   },
 });
 
