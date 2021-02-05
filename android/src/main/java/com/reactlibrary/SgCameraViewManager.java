@@ -95,6 +95,7 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
         int height = style.hasKey("height") ? style.getInt("height") : 0;
         Log.d("style width", String.valueOf(width));
         Log.d("style height", String.valueOf(height));
+        Log.d("style", String.valueOf(style));
 
     }
 
