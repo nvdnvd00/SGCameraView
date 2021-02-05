@@ -2,6 +2,7 @@ package com.reactlibrary;
 
 import android.graphics.Color;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.appcompat.widget.AppCompatCheckBox;
 
@@ -29,6 +30,7 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
 //        return cb;
         mContext = c;
         view = new View(c);
+        view.setLayoutParams( new ViewGroup.LayoutParams(200,200));
         return new View(c);
     }
 
