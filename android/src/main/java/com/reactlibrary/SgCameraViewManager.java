@@ -30,7 +30,10 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
 //        return cb;
         mContext = c;
         view = new View(c);
-        view.setLayoutParams( new ViewGroup.LayoutParams(200,200));
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        layoutParams.width=100;
+        layoutParams.height =100;
+        view.setLayoutParams(layoutParams);
         return new View(c);
     }
 
