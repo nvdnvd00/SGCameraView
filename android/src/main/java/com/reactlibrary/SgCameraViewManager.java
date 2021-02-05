@@ -91,6 +91,11 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     @ReactProp(name = "style")
     public void setStyle(ReactImageView view, @NonNull ReadableMap style) {
         mStyle = style;
+        int width = style.hasKey("width") ? style.getInt("width") : 0;
+        int height = style.hasKey("height") ? style.getInt("height") : 0;
+        Log.d("style width", String.valueOf(width));
+        Log.d("style height", String.valueOf(height));
+
     }
 
     @ReactProp(name = "lyric")
