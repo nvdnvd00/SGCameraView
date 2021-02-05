@@ -44,7 +44,7 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 
     @ReactProp(name = "beatDetail")
     public void setBeat(ReactImageView view, ReadableMap beatDetail) {
-        Log.d("beatDetail", beatDetail);
+        Log.d("beatDetail", String.valueOf(beatDetail));
 
     }
 
