@@ -22,7 +22,7 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     public static final String REACT_CLASS = "SgCameraView";
     ReactApplicationContext mCallerContext;
 
-    public ReactImageManager(ReactApplicationContext reactContext) {
+    public SgCameraViewManager(ReactApplicationContext reactContext) {
         mCallerContext = reactContext;
     }
 
@@ -33,7 +33,6 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 
     @Override
     public ReactImageView createViewInstance(ThemedReactContext context) {
-        // TODO: Implement some actually useful functionality
 //        AppCompatCheckBox cb = new AppCompatCheckBox(context);
 //        cb.setChecked(true);
 //        return cb;
@@ -44,8 +43,8 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 //    public void setBeat(View view,String prop){
 ////        view.setBackgroundColor(Color.BLUE);
 //    }
-    @ReactProp(name = 'beatDetail')
+    @ReactProp(name = "beatDetail")
     public void setBeatDetail(ReactImageView view, ReadableArray beatDetail){
-        Log.d('beatDetail',beatDetail)
+        Log.d("beatDetail",beatDetail)
     }
 }
