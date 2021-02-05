@@ -1,21 +1,30 @@
 package com.reactlibrary;
 
 import android.graphics.Color;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.appcompat.widget.AppCompatCheckBox;
 
+import com.facebook.drawee.backends.pipeline.Fresco;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.uimanager.annotations.ReactProp;
 
 import com.facebook.react.uimanager.SimpleViewManager;
 import com.facebook.react.uimanager.ThemedReactContext;
+import com.facebook.react.views.image.ReactImageManager;
+import com.facebook.react.views.image.ReactImageView;
 
-public class SgCameraViewManager extends SimpleViewManager<View> {
+public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 
     public static final String REACT_CLASS = "SgCameraView";
-    private ThemedReactContext mContext;
-    private View view;
+    ReactApplicationContext mCallerContext;
+
+    public ReactImageManager(ReactApplicationContext reactContext) {
+        mCallerContext = reactContext;
+    }
 
     @Override
     public String getName() {
@@ -23,22 +32,20 @@ public class SgCameraViewManager extends SimpleViewManager<View> {
     }
 
     @Override
-    public View createViewInstance(ThemedReactContext c) {
+    public ReactImageView createViewInstance(ThemedReactContext context) {
         // TODO: Implement some actually useful functionality
-//        AppCompatCheckBox cb = new AppCompatCheckBox(c);
+//        AppCompatCheckBox cb = new AppCompatCheckBox(context);
 //        cb.setChecked(true);
 //        return cb;
-        mContext = c;
-        view = new View(c);
-        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
-        layoutParams.width=100;
-        layoutParams.height =100;
-        view.setLayoutParams(layoutParams);
-        return new View(c);
+        return new ReactImageView(context, Fresco.newDraweeControllerBuilder(), null, mCallerContext);
     }
 
-    @ReactProp(name = "beat")
-    public void setBeat(View view,String prop){
-//        view.setBackgroundColor(Color.BLUE);
+//    @ReactProp(name = "beat")
+//    public void setBeat(View view,String prop){
+////        view.setBackgroundColor(Color.BLUE);
+//    }
+    @ReactProp(name = 'beatDetail')
+    public void setBeatDetail(ReactImageView view, ReadableArray beatDetail){
+        Log.d('beatDetail',beatDetail)
     }
 }

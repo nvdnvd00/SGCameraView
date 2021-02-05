@@ -1,7 +1,39 @@
-import { requireNativeComponent, NativeModules } from "react-native";
+import React, { Component, PropTypes } from "react";
+import { NativeModules, requireNativeComponent, View } from "react-native";
 
-const SgCameraView = requireNativeComponent("SgCameraView", null);
 const SgCameraManager = NativeModules.SgCameraManager;
 
+class SgCameraComponent extends Component {
+  constructor(props) {
+    super(props);
+  }
+
+  onRecordingEnd(event) {
+    if (!this.props.onRecordingEnd) {
+      return;
+    }
+    // this.props.onRecordingEnd(event.nativeEvent);
+    this.props.onRecordingEnd(event);
+  }
+
+  render() {
+    return (
+      <SgCameraView {...this.props} onRecordingEnd={this.onRecordingEnd} />
+    );
+  }
+}
+
+SgCameraComponent.propTypes = {
+  beat: PropTypes.string,
+  onRecordingEnd: PropTypes.func,
+  ...View.propTypes,
+};
+
+const SgCameraView = requireNativeComponent("SgCameraView", SgCameraComponent, {
+  nativeOnly: {
+    onChange: true,
+  },
+});
+
 export { SgCameraManager };
-export default SgCameraView;
+export default SgCameraComponent;
