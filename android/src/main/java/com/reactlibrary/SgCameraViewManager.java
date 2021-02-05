@@ -45,8 +45,8 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 //    public void setBeat(View view,String prop){
 ////        view.setBackgroundColor(Color.BLUE);
 //    }
-    @ReactProp(name = "beatDetail")
-    public void setBeatDetail(ReactImageView view, ReadableArray beatDetail) {
-        Log.d("beatDetail", String.valueOf(beatDetail));
+    @ReactProp(name = "beat")
+    public void setBeatDetail(ReactImageView view, String beat) {
+        Log.d("beat", beat);
     }
 }
