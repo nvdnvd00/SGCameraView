@@ -1,6 +1,7 @@
 package com.reactlibrary;
 
 import android.graphics.Color;
+import android.support.annotation.NonNull;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,6 +30,11 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
         mCallerContext = reactContext;
     }
 
+    public static String mBeat;
+    public static ReadableMap mBeatDetail;
+    public static ReadableMap mStyle;
+    public static ReadableArray mLyrics;
+
     @Override
     public String getName() {
         return REACT_CLASS;
@@ -43,14 +49,24 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     }
 
     @ReactProp(name = "beatDetail")
-    public void setBeat(ReactImageView view, ReadableMap beatDetail) {
-        Log.d("beatDetail", String.valueOf(beatDetail));
+    public void setBeatDetail(ReactImageView view, @NonNull ReadableMap beatDetail) {
+        mBeatDetail = beatDetail;
 
     }
 
     @ReactProp(name = "beat")
-    public void setBeatDetail(ReactImageView view, String beat) {
-        Log.d("beat", beat);
+    public void setBeat(ReactImageView view, @NonNull String beat) {
+        mBeat = beat;
+    }
+
+    @ReactProp(name = "style")
+    public void setStyle(ReactImageView view, @NonNull ReadableMap style) {
+        mStyle = style;
+    }
+
+    @ReactProp(name = "lyric")
+    public void setLyric(ReactImageView view, @NonNull ReadableArray lyric) {
+        mLyrics = lyric;
     }
 
 }
