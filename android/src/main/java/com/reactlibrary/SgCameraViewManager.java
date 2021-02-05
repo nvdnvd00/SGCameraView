@@ -63,7 +63,7 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 
     @Override
     public ReactImageView createViewInstance(ThemedReactContext context) {
-        ReactImageView view = new ReactImageView(context, Fresco.newDraweeControllerBuilder(), mCallerContext);
+        ReactImageView view = new ReactImageView(context, Fresco.newDraweeControllerBuilder(), null,mCallerContext);
         mEventEmitter = context.getJSModule(RCTEventEmitter.class);
 //        onRecordingEnd(view, "");
         return view;
