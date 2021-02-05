@@ -12,6 +12,7 @@ import androidx.appcompat.widget.AppCompatCheckBox;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.uimanager.annotations.ReactProp;
 
 import com.facebook.react.uimanager.SimpleViewManager;
@@ -41,12 +42,15 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
         return new ReactImageView(context, Fresco.newDraweeControllerBuilder(), null, mCallerContext);
     }
 
-    //    @ReactProp(name = "beat")
-//    public void setBeat(View view,String prop){
-////        view.setBackgroundColor(Color.BLUE);
-//    }
+    @ReactProp(name = "beatDetail")
+    public void setBeat(ReactImageView view, ReadableMap beatDetail) {
+        Log.d("beatDetail", beatDetail);
+
+    }
+
     @ReactProp(name = "beat")
     public void setBeatDetail(ReactImageView view, String beat) {
         Log.d("beat", beat);
     }
+
 }
