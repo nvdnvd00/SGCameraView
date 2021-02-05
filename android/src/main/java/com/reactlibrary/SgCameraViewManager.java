@@ -63,7 +63,7 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
 
     @Override
     public ReactImageView createViewInstance(ThemedReactContext context) {
-        ReactImageView view = new ReactImageView(context, Fresco.newDraweeControllerBuilder(), null, mCallerContext);
+        ReactImageView view = new ReactImageView(context, Fresco.newDraweeControllerBuilder(), mCallerContext);
         mEventEmitter = context.getJSModule(RCTEventEmitter.class);
 //        onRecordingEnd(view, "");
         return view;
@@ -80,6 +80,8 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
     @ReactProp(name = "beatDetail")
     public void setBeatDetail(ReactImageView view, @NonNull ReadableMap beatDetail) {
         mBeatDetail = beatDetail;
+        String coverPhotoUrl = beatDetail.hasKey("coverPhotoUrl") ? beatDetail.getString("coverPhotoUrl") : "";
+        System.out.print("coverPhotoUrl:::" + coverPhotoUrl);
 
     }
 
@@ -93,9 +95,6 @@ public class SgCameraViewManager extends SimpleViewManager<ReactImageView> {
         mStyle = style;
         int width = style.hasKey("width") ? style.getInt("width") : 0;
         int height = style.hasKey("height") ? style.getInt("height") : 0;
-        Log.d("style width", String.valueOf(width));
-        Log.d("style height", String.valueOf(height));
-        Log.d("style", String.valueOf(style));
 
     }
 
